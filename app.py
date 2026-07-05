@@ -123,6 +123,11 @@ def availability():
         time_max = dtmod.datetime(date.year, date.month, date.day, 23, 0, tzinfo=tz)
         now = dtmod.datetime.now(tz)
 
+        # Block weekday work hours (Mon-Fri 7am-5pm)
+        is_weekday = date.weekday() < 5  # Mon=0, Fri=4
+        work_start = dtmod.datetime(date.year, date.month, date.day, 7, 0, tzinfo=tz)
+        work_end = dtmod.datetime(date.year, date.month, date.day, 17, 0, tzinfo=tz)
+
         service = _get_calendar_service()
 
         items = [{"id": cid} for cid in ALL_CALENDARS.values() if cid]
@@ -142,10 +147,16 @@ def availability():
             s_iso, e_iso = current.isoformat(), slot_end.isoformat()
 
             is_busy = False
+
+            # Check calendar busy periods
             for bp in busy_periods:
                 if s_iso < bp['end'] and e_iso > bp['start']:
                     is_busy = True
                     break
+
+            # Block weekday work hours (Mon-Fri 7am-5pm)
+            if is_weekday and s_iso >= work_start.isoformat() and current < work_end:
+                is_busy = True
             time_str = current.strftime('%H:%M')
             is_past = time_str <= now.strftime('%H:%M') and date_str == now.strftime('%Y-%m-%d')
 
