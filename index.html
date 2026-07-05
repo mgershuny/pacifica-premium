@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pacifica Premium — Airport & Long Distance Rides</title>
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111;
+    --surface2: #1a1a1a;
+    --gold: #c8a46e;
+    --gold-dim: #a8884d;
+    --text: #f0f0f0;
+    --text-muted: #888;
+    --radius: 12px;
+    --gap: clamp(1.5rem, 5vw, 4rem);
+    --max-w: 1100px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg); color: var(--text);
+    line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+  img { max-width: 100%; display: block; }
+  a { color: var(--gold); text-decoration: none; }
+  a:hover { color: #dbb876; }
+
+  h1, h2, h3 { font-weight: 400; letter-spacing: -0.02em; line-height: 1.2; }
+  h1 { font-size: clamp(2.2rem, 6vw, 4.2rem); font-weight: 300; }
+  h2 { font-size: clamp(1.6rem, 4vw, 2.6rem); margin-bottom: 1rem; }
+  h3 { font-size: 1.25rem; font-weight: 500; }
+  .gold { color: var(--gold); }
+  .muted { color: var(--text-muted); }
+
+  section { padding: clamp(3rem, 8vw, 6rem) 1.5rem; }
+  .container { max-width: var(--max-w); margin: 0 auto; }
+  .section-title { text-align: center; margin-bottom: 3rem; }
+  .section-title p { max-width: 600px; margin: 0.5rem auto 0; }
+
+  /* ─── Hero ─── */
+  .hero {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    text-align: center; position: relative; overflow: hidden;
+    padding: 2rem 1.5rem;
+  }
+  .hero-bg {
+    position: absolute; inset: 0; z-index: 0;
+  }
+  .hero-bg img {
+    width: 100%; height: 100%; object-fit: cover;
+  }
+  .hero-bg::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(10,10,10,0.85) 0%, rgba(10,10,10,0.5) 50%, rgba(10,10,10,0.9) 100%);
+  }
+  .hero-content { position: relative; z-index: 1; max-width: 720px; }
+  .hero h1 { margin-bottom: 1rem; }
+  .hero p {
+    font-size: clamp(1rem, 2vw, 1.25rem); color: var(--text-muted);
+    max-width: 560px; margin: 0 auto 2.5rem;
+  }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 1rem 2.5rem; border-radius: 50px;
+    font-size: 1rem; font-weight: 500; cursor: pointer; transition: all 0.3s;
+    border: none; text-decoration: none;
+  }
+  .btn-primary { background: var(--gold); color: #0a0a0a; }
+  .btn-primary:hover { background: #dbb876; transform: translateY(-1px); }
+  .btn-outline { background: transparent; color: var(--text); border: 1px solid rgba(255,255,255,0.2); }
+  .btn-outline:hover { border-color: var(--gold); color: var(--gold); }
+
+  .features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+  .feature-card {
+    background: var(--surface); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: var(--radius); padding: 2rem; text-align: center;
+    transition: border-color 0.3s;
+  }
+  .feature-card:hover { border-color: rgba(200,164,110,0.3); }
+  .feature-icon { font-size: 2rem; margin-bottom: 1rem; }
+  .feature-card h3 { margin-bottom: 0.5rem; }
+  .feature-card p { font-size: 0.9rem; color: var(--text-muted); }
+
+  /* ─── Gallery ─── */
+  .gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 0.5rem;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+  .gallery-item {
+    border-radius: 8px; overflow: hidden; position: relative;
+    background: var(--surface2); cursor: pointer;
+  }
+  .gallery-item img {
+    width: 100%; height: 100%; object-fit: cover;
+    transition: transform 0.4s ease;
+    display: block;
+  }
+  .gallery-item:hover img { transform: scale(1.03); }
+  .gallery-item.tall { grid-row: span 2; }
+  .gallery-item.wide { grid-column: span 2; }
+
+  /* ─── Floating Book Button ─── */
+  .float-book {
+    position: fixed;
+    right: 1.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 999;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    padding: 1rem 0.6rem;
+    border-radius: 50px;
+    background: var(--gold);
+    color: #0a0a0a;
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    border: none;
+    transition: all 0.3s;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    box-shadow: 0 4px 20px rgba(200,164,110,0.3);
+  }
+  .float-book:hover {
+    background: #dbb876;
+    transform: translateY(-50%) scale(1.05);
+    box-shadow: 0 6px 30px rgba(200,164,110,0.5);
+  }
+  .float-book span {
+    writing-mode: horizontal-tb;
+    font-size: 1.1rem;
+  }
+  @media (max-width: 900px) {
+    .float-book { display: none; }
+  }
+
+  /* Lightbox */
+  .lightbox {
+    display: none; position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,0.95);
+    align-items: center; justify-content: center;
+    padding: 2rem; cursor: pointer;
+  }
+  .lightbox.active { display: flex; }
+  .lightbox img {
+    max-width: 90vw; max-height: 90vh; object-fit: contain;
+    border-radius: 4px;
+  }
+  .lightbox .close {
+    position: absolute; top: 1.5rem; right: 2rem;
+    font-size: 2rem; color: #fff; cursor: pointer;
+    width: 48px; height: 48px; display: flex;
+    align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.5); border-radius: 50%;
+  }
+
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 2rem; counter-reset: step; }
+  .step { text-align: center; counter-increment: step; }
+  .step-num {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: var(--gold); color: #0a0a0a;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem; font-weight: 600; margin: 0 auto 1rem;
+  }
+  .step h3 { margin-bottom: 0.5rem; }
+  .step p { font-size: 0.9rem; color: var(--text-muted); }
+
+  .driver-card {
+    background: var(--surface); border-radius: var(--radius);
+    border: 1px solid rgba(255,255,255,0.06);
+    padding: clamp(2rem, 4vw, 3rem);
+    display: grid; grid-template-columns: 1fr 2fr; gap: 2rem; align-items: center;
+  }
+  .driver-avatar {
+    width: 120px; height: 120px; border-radius: 50%;
+    background: var(--surface2); margin: 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 3rem; border: 2px solid var(--gold-dim);
+  }
+  .driver-info h3 { margin-bottom: 0.5rem; }
+  .driver-info ul { list-style: none; display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+  .driver-info ul li {
+    background: rgba(200,164,110,0.1); color: var(--gold);
+    padding: 0.3rem 0.8rem; border-radius: 50px; font-size: 0.85rem;
+  }
+
+  .booking-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; align-items: start; }
+  .calendar-embed { background: var(--surface); border-radius: var(--radius); overflow: hidden; border: 1px solid rgba(255,255,255,0.06); min-height: 400px; }
+  .calendar-embed iframe { width: 100%; height: 500px; border: 0; }
+  .booking-form {
+    background: var(--surface); border-radius: var(--radius);
+    border: 1px solid rgba(255,255,255,0.06); padding: 2rem;
+  }
+  .booking-form h3 { margin-bottom: 1.5rem; }
+  .form-group { margin-bottom: 1rem; }
+  .form-group label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.3rem; }
+  .form-group input, .form-group select, .form-group textarea {
+    width: 100%; padding: 0.75rem 1rem; border-radius: 8px;
+    background: var(--surface2); border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text); font-size: 0.95rem; transition: border-color 0.2s;
+  }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--gold); }
+  .form-group textarea { resize: vertical; min-height: 80px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+
+  .cta-section {
+    text-align: center;
+    background: linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .cta-section h2 { margin-bottom: 0.5rem; }
+  .cta-section p { color: var(--text-muted); margin-bottom: 2rem; }
+  .phone-display { font-size: 2rem; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+
+  footer { text-align: center; padding: 2rem 1.5rem; color: var(--text-muted); font-size: 0.85rem; border-top: 1px solid rgba(255,255,255,0.06); }
+
+  @media (max-width: 768px) {
+    .features-grid { grid-template-columns: 1fr; }
+    .booking-wrap { grid-template-columns: 1fr; }
+    .driver-card { grid-template-columns: 1fr; text-align: center; }
+    .form-row { grid-template-columns: 1fr; }
+    .phone-display { font-size: 1.4rem; }
+    .hero { min-height: 80vh; }
+    .gallery-item.tall, .gallery-item.wide { grid-row: auto; grid-column: auto; }
+    .float-book { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══ Floating Book Button (desktop) ═══ -->
+<a href="#bookingForm" class="float-book">
+  <span>📖</span> Book Now
+</a>
+
+<!-- ═══ HERO ═══ -->
+<section class="hero">
+  <div class="hero-bg">
+    <img src="images/van1.jpg" alt="Chrysler Pacifica Premium">
+  </div>
+  <div class="hero-content">
+    <p class="gold" style="font-size: 0.85rem; letter-spacing: 0.2em; margin-bottom: 1.5rem;">PREMIUM AIRPORT & LONG DISTANCE RIDES</p>
+    <h1>Your Ride,<br><span class="gold">Elevated.</span></h1>
+    <p>6-passenger Chrysler Pacifica PHEV. Automatic everything. Immaculately clean. A driver who knows when to talk and when to let you enjoy the ride.</p>
+    <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+      <a href="#bookingForm" class="btn btn-primary">Book a Ride</a>
+      <a href="#vehicle" class="btn btn-outline">See the Vehicle</a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ VEHICLE ═══ -->
+<section id="vehicle">
+  <div class="container">
+    <div class="section-title">
+      <h2>The <span class="gold">Pacifica Premium</span></h2>
+      <p>2024 Chrysler Pacifica PHEV — Select/Sport Edition. Black. Hybrid. Immaculate.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🛋️</div>
+        <h3>First-Class Comfort</h3>
+        <p>Premium seating with captain's chairs. Smooth hybrid ride. Climate control for every row. People love how comfortable it is.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🧼</div>
+        <h3>Immaculately Clean</h3>
+        <p>Deep cleaned. No crumbs, no stains, no odors. You won't get dirty getting in or out.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔌</div>
+        <h3>Power for Everyone</h3>
+        <p>USB-C and USB-A outlets in every row. Laptops, phones, tablets — everyone stays charged.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🚪</div>
+        <h3>Automatic Everything</h3>
+        <p>Sliding doors and trunk open and close at the touch of a button. No handles. No lifting. No touching dirty surfaces.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">👥</div>
+        <h3>6 Passengers + Luggage</h3>
+        <p>Six passengers plus driver plus luggage. Fold the back row for gear — suitcases, golf bags, strollers, cameras. Pick your own music on the road.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔇</div>
+        <h3>Quiet Hybrid Ride</h3>
+        <p>Electric mode means whisper-quiet cruising. Conversation or silence — your call, not mine. No engine drone on the highway.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ HOW IT WORKS ═══ -->
+<section style="background: var(--surface);">
+  <div class="container">
+    <div class="section-title">
+      <h2>How It <span class="gold">Works</span></h2>
+      <p>Premium service, zero friction — from booking to drop-off.</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3>Book Online or Call</h3>
+        <p>Check my live calendar, pick your time, and book in seconds. Or call — my AI assistant handles everything.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Doors Open for You</h3>
+        <p>I pull up. Both sliding doors glide open. The trunk rises. You never touch a handle or get your hands dirty.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>Sit Back & Arrive</h3>
+        <p>USB charge, climate control, plenty of leg space. We get you there on time, comfortable, and stress-free.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ GALLERY ═══ -->
+<section id="gallery">
+  <div class="container">
+    <div class="section-title">
+      <h2>The <span class="gold">Pacifica</span> in Photos</h2>
+      <p>Exterior, interior, night shots — see exactly what you're getting.</p>
+    </div>
+    <div class="gallery-grid">
+      <div class="gallery-item tall"><img src="images/van1.jpg" alt="Pacifica 1" loading="lazy"></div>
+      <div class="gallery-item"><img src="images/van2.jpg" alt="Pacifica 2" loading="lazy"></div>
+      <div class="gallery-item"><img src="images/van3.jpg" alt="Pacifica 3" loading="lazy"></div>
+      <div class="gallery-item"><img src="images/van4.jpg" alt="Pacifica 4" loading="lazy"></div>
+      <div class="gallery-item"><img src="images/van5.jpg" alt="Pacifica 5" loading="lazy"></div>
+    </div>
+  </div>
+</section>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox" onclick="this.classList.remove('active')">
+  <span class="close">&times;</span>
+  <img id="lightboxImg" src="" alt="Enlarged view">
+</div>
+
+<!-- ═══ THE DRIVER ═══ -->
+<section style="background: var(--surface);">
+  <div class="container">
+    <div class="section-title">
+      <h2>Your <span class="gold">Driver</span></h2>
+      <p>Courteous, local, and perceptive. I know when to talk and when to let you enjoy the quiet.</p>
+    </div>
+    <div class="driver-card">
+      <div class="driver-avatar">🧑‍✈️</div>
+      <div class="driver-info">
+        <h3>MG</h3>
+        <p class="muted">Licensed, insured. 15+ years driving the GTA. I treat your ride like my own home.</p>
+        <ul>
+          <li>📍 Toronto / GTA</li>
+          <li>🗣️ Great conversation</li>
+          <li>🤫 Or total silence</li>
+          <li>⏱️ Always punctual</li>
+          <li>🧳 Luggage assistance</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ CALENDAR + BOOKING ═══ -->
+<section id="book">
+  <div class="container">
+    <div class="section-title">
+      <h2>Check Availability & <span class="gold">Book</span></h2>
+      <p>I run evening and early morning airport/long-distance trips. Check my live calendar below.</p>
+    </div>
+    <div class="booking-wrap">
+      <div>
+        <div class="calendar-embed">
+          <iframe src="https://calendar.google.com/calendar/embed?src=708f34521ae94fc8a576210a522a7827a27b1a5157fa91d7c3ca1ddf1b1a4de4%40group.calendar.google.com&ctz=America/Toronto&showNav=1&showDate=1&showTabs=0&showCalendars=0&mode=WEEK" style="border: 0; width: 100%; height: 500px;" frameborder="0" scrolling="no"></iframe>
+        </div>
+      </div>
+      <div>
+        <form class="booking-form" id="bookingForm" style="scroll-margin-top: 20px;">
+          <h3>Request a Ride</h3>
+          <p class="muted" style="font-size: 0.85rem; margin-bottom: 1.5rem;">Fill this out and I'll confirm within the hour. Or call to book with my AI assistant.</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="date">Date</label>
+              <input type="date" id="date" required>
+            </div>
+            <div class="form-group">
+              <label for="time">Time</label>
+              <input type="time" id="time" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="name">Your Name</label>
+            <input type="text" id="name" placeholder="Full name" required>
+          </div>
+          <div class="form-group">
+            <label for="phone">Phone</label>
+            <input type="tel" id="phone" placeholder="(555) 123-4567" required>
+          </div>
+          <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" placeholder="you@example.com">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="pickup">Pickup Location</label>
+              <input type="text" id="pickup" placeholder="Address or airport terminal" required>
+            </div>
+            <div class="form-group">
+              <label for="dropoff">Drop-off Location</label>
+              <input type="text" id="dropoff" placeholder="Address or airport terminal" required>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="passengers">Passengers</label>
+              <select id="passengers">
+                <option>1</option><option>2</option><option>3</option>
+                <option>4</option><option selected>5</option><option>6</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="trip">Trip Type</label>
+              <select id="trip">
+                <option>To Airport (YYZ)</option>
+                <option>From Airport (YYZ)</option>
+                <option>To Airport (YTZ)</option>
+                <option>From Airport (YTZ)</option>
+                <option>Long Distance</option>
+                <option>Event / Night Out</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Payment Method</label>
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;" id="paymentOptions">
+              <label class="pmt-option" style="flex:1;min-width:100px;display:flex;align-items:center;gap:0.4rem;padding:0.75rem 1rem;background:var(--surface2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;cursor:pointer;">
+                <input type="radio" name="payment" value="credit_card" checked style="accent-color:var(--gold);">
+                <span>💳 Card</span>
+              </label>
+              <label class="pmt-option" style="flex:1;min-width:100px;display:flex;align-items:center;gap:0.4rem;padding:0.75rem 1rem;background:var(--surface2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;cursor:pointer;">
+                <input type="radio" name="payment" value="paypal" style="accent-color:var(--gold);">
+                <span>🅿️ PayPal</span>
+              </label>
+              <label class="pmt-option" style="flex:1;min-width:100px;display:flex;align-items:center;gap:0.4rem;padding:0.75rem 1rem;background:var(--surface2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;cursor:pointer;">
+                <input type="radio" name="payment" value="cash" style="accent-color:var(--gold);">
+                <span>💵 Cash</span>
+              </label>
+            </div>
+            <p style="font-size:0.75rem;color:var(--text-muted);margin-top:0.3rem;" id="pmtNote">Card payments processed securely via Stripe. You'll pay now and the booking is locked in.</p>
+          </div>
+          <div class="form-group">
+            <label for="notes">Notes (flight number, luggage, special requests)</label>
+            <textarea id="notes" placeholder="e.g. Flight AC123, 2 large suitcases, need a booster seat"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">Request Booking</button>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.75rem; text-align: center;">
+            Or call <strong class="gold" id="phonePlaceholder">(XXX) XXX-XXXX</strong> to book with my AI assistant
+          </p>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ CTA ═══ -->
+<section class="cta-section" id="call">
+  <div class="container">
+    <h2>Ready to Ride?</h2>
+    <p class="phone-display"><span class="gold" id="ctaPhone">(XXX) XXX-XXXX</span></p>
+    <p style="margin-bottom: 2rem;">Call or book online — my AI assistant handles everything</p>
+    <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+      <a href="#bookingForm" class="btn btn-primary">Book Online</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>Pacifica Premium — Toronto Airport & Long Distance Rides</p>
+  <p style="margin-top: 0.5rem;">Licensed & insured. Serving YYZ, YTZ, YHM and all GTA locations.</p>
+</footer>
+
+<script>
+// Anchor scroll fix — re-scroll after lazy images load
+(function() {
+  const hash = window.location.hash;
+  if (hash) {
+    const target = document.querySelector(hash);
+    if (target) {
+      // imagesLoaded-style: wait for all lazy images to finish
+      let imgs = document.querySelectorAll('img[loading="lazy"]');
+      let loaded = 0;
+      let total = imgs.length;
+      if (total === 0) return;
+      imgs.forEach(img => {
+        if (img.complete) { loaded++; }
+        else { img.addEventListener('load', check); img.addEventListener('error', check); }
+      });
+      function check() {
+        loaded++;
+        if (loaded >= total) {
+          setTimeout(() => target.scrollIntoView({ behavior: 'instant', block: 'start' }), 100);
+        }
+      }
+      if (loaded >= total) check();
+    }
+  }
+})();
+
+// Lightbox
+document.querySelectorAll('.gallery-item img').forEach(img => {
+  img.addEventListener('click', function(e) {
+    e.stopPropagation();
+    document.getElementById('lightboxImg').src = this.src;
+    document.getElementById('lightbox').classList.add('active');
+  });
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') document.getElementById('lightbox').classList.remove('active');
+});
+
+// Payment note toggle
+document.querySelectorAll('input[name="payment"]').forEach(el => {
+  el.addEventListener('change', function() {
+    const note = document.getElementById('pmtNote');
+    if (this.value === 'cash') {
+      note.textContent = 'Cash at ride. Booking is pending until MG confirms.';
+    } else {
+      note.textContent = 'Card/PayPal payments processed securely via Stripe. You\'ll pay now and the booking is locked in.';
+    }
+  });
+});
+
+// Booking form
+document.getElementById('bookingForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const btn = this.querySelector('button[type="submit"]');
+  btn.textContent = '⏳ Processing...';
+  btn.disabled = true;
+
+  const pmt = document.querySelector('input[name="payment"]:checked').value;
+
+  const data = {
+    date: document.getElementById('date').value,
+    time: document.getElementById('time').value,
+    name: document.getElementById('name').value,
+    phone: document.getElementById('phone').value,
+    email: document.getElementById('email').value,
+    pickup: document.getElementById('pickup').value,
+    dropoff: document.getElementById('dropoff').value,
+    passengers: document.getElementById('passengers').value,
+    trip: document.getElementById('trip').value,
+    notes: document.getElementById('notes').value,
+    payment_method: pmt,
+  };
+
+  try {
+    const res = await fetch('/api/book', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data),
+    });
+    const result = await res.json();
+
+    if (result.status === 'redirect' && result.checkout_url) {
+      // Send to Stripe Checkout
+      window.location.href = result.checkout_url;
+    } else if (result.status === 'pending') {
+      // Cash booking - pending MG confirmation
+      btn.textContent = '✅ Submitted!';
+      btn.style.background = '#4a7c59';
+      document.getElementById('bookingForm').innerHTML = `
+        <div style="text-align:center;padding:2rem">
+          <div style="font-size:3rem;margin-bottom:1rem">✅</div>
+          <h3>Booking Submitted!</h3>
+          <p class="muted">MG will review and confirm shortly. You'll get a confirmation after approval.</p>
+          <p style="font-size:0.85rem;color:var(--gold);margin-top:0.5rem">Booking ID: ${result.booking_id}</p>
+        </div>
+      `;
+    } else {
+      throw new Error(result.error || 'Something went wrong');
+    }
+  } catch (err) {
+    btn.textContent = '❌ Error — Try Again';
+    btn.disabled = false;
+    console.error(err);
+  }
+});
+</script>
+
+</body>
+</html>

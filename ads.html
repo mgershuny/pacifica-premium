@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ad Creative — Pacifica Premium</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0a0a; color: #f0f0f0; font-family: -apple-system, system-ui, sans-serif; padding: 2rem; }
+  h1 { text-align: center; margin-bottom: 0.5rem; color: #c8a46e; font-weight: 300; font-size: 2rem; }
+  .subtitle { text-align: center; color: #888; margin-bottom: 3rem; }
+
+  .ads { display: flex; flex-wrap: wrap; gap: 2rem; justify-content: center; }
+
+  /* ─── Instagram Square 1080×1080 ─── */
+  .ig-square {
+    width: 400px; background: #0a0a0a; border-radius: 16px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .ig-img { width: 100%; aspect-ratio: 1; background: #1a1a1a; overflow: hidden; }
+  .ig-img img { width: 100%; height: 100%; object-fit: cover; }
+  .ig-body { padding: 1.5rem; }
+  .ig-body h2 { font-size: 1.1rem; font-weight: 500; margin-bottom: 0.5rem; color: #c8a46e; }
+  .ig-body p { font-size: 0.85rem; color: #bbb; line-height: 1.5; margin-bottom: 1rem; }
+  .ig-cta { color: #c8a46e; font-weight: 600; font-size: 0.9rem; text-decoration: none; display: inline-block; }
+
+  /* ─── Instagram Story 1080×1920 ─── */
+  .ig-story {
+    width: 300px; border-radius: 24px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.1); position: relative;
+  }
+  .ig-story-img { width: 100%; aspect-ratio: 9/16; background: #111; overflow: hidden; position: relative; }
+  .ig-story-img img { width: 100%; height: 100%; object-fit: cover; }
+  .story-overlay {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    padding: 2rem 1.5rem;
+    background: linear-gradient(transparent, rgba(0,0,0,0.9));
+  }
+  .story-overlay h2 { font-size: 1.3rem; color: #c8a46e; margin-bottom: 0.3rem; }
+  .story-overlay p { font-size: 0.8rem; color: #ccc; }
+  .story-top { position: absolute; top: 0; left: 0; right: 0; padding: 1rem; }
+  .story-top .gold { color: #c8a46e; font-size: 0.7rem; letter-spacing: 0.15em; }
+
+  /* ─── Facebook Feed ─── */
+  .fb-post {
+    width: 500px; background: #111; border-radius: 8px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .fb-header { padding: 1rem 1rem 0.5rem; display: flex; align-items: center; gap: 0.75rem; }
+  .fb-avatar { width: 40px; height: 40px; border-radius: 50%; background: #c8a46e; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
+  .fb-name { font-weight: 600; font-size: 0.9rem; }
+  .fb-time { font-size: 0.75rem; color: #888; }
+  .fb-body { padding: 0.5rem 1rem 1rem; font-size: 0.9rem; line-height: 1.5; color: #ddd; }
+  .fb-media { width: 100%; aspect-ratio: 16/9; background: #1a1a1a; overflow: hidden; }
+  .fb-media img { width: 100%; height: 100%; object-fit: cover; }
+  .fb-footer { padding: 0.75rem 1rem 1rem; }
+  .fb-cta { color: #c8a46e; font-weight: 500; font-size: 0.9rem; cursor: pointer; }
+
+  .label { color: #555; font-size: 0.75rem; text-align: center; margin-top: 2rem; }
+  .copy-block {
+    max-width: 600px; margin: 2rem auto;
+    background: #111; border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px; padding: 1.5rem;
+  }
+  .copy-block h3 { color: #c8a46e; margin-bottom: 0.75rem; font-weight: 400; }
+  .copy-block pre {
+    background: #0a0a0a; padding: 1rem; border-radius: 8px;
+    font-size: 0.85rem; line-height: 1.6; color: #ccc; white-space: pre-wrap; font-family: inherit;
+  }
+</style>
+</head>
+<body>
+
+<h1>Pacifica Premium</h1>
+<p class="subtitle">Ad Creative — Instagram & Facebook</p>
+
+<div class="ads">
+
+  <!-- Instagram Square -->
+  <div>
+    <div class="label">INSTAGRAM FEED · 1080×1080</div>
+    <div class="ig-square">
+      <div class="ig-img">
+        <img src="images/img_b9aab5140d68.jpg" alt="Pacifica Premium">
+      </div>
+      <div class="ig-body">
+        <h2>Your ride to the airport just got an upgrade. 🚐✨</h2>
+        <p>Black Chrysler Pacifica PHEV. 7 seats. Power doors & trunk. USB/USB-C in every row. Immaculately clean. A driver who knows when to talk and when to shut up.</p>
+        <p>Airport runs. Home pickup. Long distance. Premium service without the limo price.</p>
+        <a href="#" class="ig-cta">Book your ride →</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Instagram Story -->
+  <div>
+    <div class="label">INSTAGRAM STORY · 1080×1920</div>
+    <div class="ig-story">
+      <div class="ig-story-img">
+        <img src="images/img_34900eeb4b12.jpg" alt="Pacifica night" style="object-position: center 30%;">
+        <div class="story-top"><span class="gold">PREMIUM AIRPORT RIDES</span></div>
+        <div class="story-overlay">
+          <h2>Doors open. You just sit.</h2>
+          <p>Automatic sliding doors · Power trunk · 7 seats<br>USB everywhere · Immaculate interior</p>
+          <p style="margin-top: 0.75rem; color: #c8a46e; font-weight: 500;">Book: (XXX) XXX-XXXX</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Facebook Post -->
+  <div>
+    <div class="label">FACEBOOK FEED</div>
+    <div class="fb-post">
+      <div class="fb-header">
+        <div class="fb-avatar">🚐</div>
+        <div>
+          <div class="fb-name">Pacifica Premium</div>
+          <div class="fb-time">Sponsored · 1 hr ago</div>
+        </div>
+      </div>
+      <div class="fb-media">
+        <img src="images/img_4176a3b9c2f2.jpg" alt="Pacifica Premium">
+      </div>
+      <div class="fb-body">
+        <strong>🚐 Premium Airport Rides — Pacifica Premium</strong><br><br>
+        Tired of cramped Ubers and dirty taxis? The Pacifica Premium is your new airport ride.<br><br>
+        ✅ 7-passenger Chrysler Pacifica PHEV — black, clean, comfortable<br>
+        ✅ Automatic sliding doors & trunk — never touch a handle<br>
+        ✅ USB-C & USB-A in every row — everyone stays charged<br>
+        ✅ Immaculately cleaned before every ride<br>
+        ✅ Courteous local driver — conversation or silence, your call<br><br>
+        Home pickup. Airport drop-off. Long distance. Premium service at UberXL prices.<br><br>
+        📍 Serving YYZ, YTZ, YHM & all GTA<br>
+        📞 Book: (XXX) XXX-XXXX
+      </div>
+      <div class="fb-footer">
+        <span class="fb-cta">💬 Comment · 👍 Like · 🔗 Book Now</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="copy-block">
+  <h3>📋 Caption Copy — Instagram</h3>
+  <pre>Your ride to the airport just got an upgrade. 🚐✨
+
+The Pacifica Premium. 7-passenger Chrysler Pacifica PHEV. Black, clean, and loaded with features you'll actually use.
+
+• Automatic doors & trunk — you never touch a handle
+• USB-C & USB-A in every row
+• Power outlets in the backseat
+• Immaculately cleaned before every ride
+• A driver who knows when to talk and when to shut up
+
+Home pickup. Airport drop-off. Long distance trips welcome.
+Premium service without the limousine price tag.
+
+📞 Book: (XXX) XXX-XXXX
+📍 Toronto / GTA
+
+#AirportRides #PacificaPremium #YYZ #TorontoRides #CleanRide #AirportTransfer #GTA</pre>
+</div>
+
+<div class="copy-block">
+  <h3>📋 Ad Copy — Facebook</h3>
+  <pre>Headline: Your Airport Ride, Elevated.
+Body: Tired of cramped rides and dirty cars? The Pacifica Premium is here.
+
+Black Chrysler Pacifica PHEV with 7 passenger seats, automatic doors and trunk, USB power in every row, and an immaculate interior. Your driver is a courteous local who knows when to chat and when to give you peace and quiet.
+
+Home pickup → Airport drop-off. Or reverse. Long distance trips welcome.
+
+Book by phone — my AI assistant handles everything.
+(XXX) XXX-XXXX
+
+Serving YYZ, YTZ, YHM and all GTA.</pre>
+</div>
+
+<div class="copy-block">
+  <h3>🔧 Ad Strategy Notes</h3>
+  <pre>INSTAGRAM:
+- Post the square ad to feed + stories
+- Use the automatic-door video as a reel (when available)
+- Target: Toronto/GTA, ages 25-65, interest: travel, business travel, airport
+- Best posting: Sunday evenings, Monday early mornings (pre-travel planning)
+
+FACEBOOK:
+- Target: "frequent flyers" + "airport transportation" + "Toronto residents"
+- Set radius: 50km around YYZ/YTZ
+- Budget start: $10-15/day, optimize for calls/messages
+- Run Tue-Thu mornings when people plan weekend trips</pre>
+</div>
+
+</body>
+</html>

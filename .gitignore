@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.env
+venv/
+audio/*.mp3
+.DS_Store
+*.db
