@@ -9,3 +9,34 @@ services:
         value: 3.11.0
       - key: APP_URL
         value: https://pacifica-premium.onrender.com
+      - key: MG_EMAIL
+        value: mgershuny@gmail.com
+      - key: MG_PHONE
+        value: +16476864540
+      - key: PORT
+        value: 5000
+      - key: MG_CONFIRM_TOKEN
+        value: pacifica-confirm-2026
+      - key: PACIFICA_CALENDAR_ID
+        value: 708f34521ae94fc8a576210a522a7827a27b1a5157fa91d7c3ca1ddf1b1a4de4@group.calendar.google.com
+      # ─── REQUIRED SECRETS (set these in Render dashboard AFTER deploy) ───
+      # - key: STRIPE_PUBLISHABLE_KEY
+      #   value: <from Stripe dashboard>
+      # - key: STRIPE_SECRET_KEY
+      #   value: <from Stripe dashboard>
+      # - key: TWILIO_ACCOUNT_SID
+      #   value: <from Twilio console>
+      # - key: TWILIO_AUTH_TOKEN
+      #   value: <from Twilio console>
+      # - key: TWILIO_API_KEY_SID
+      #   value: <from Twilio console>
+      # - key: TWILIO_API_KEY_SECRET
+      #   value: <from Twilio console>
+      # - key: TWILIO_PHONE
+      #   value: +14388148523
+      # - key: ELEVENLABS_API_KEY
+      #   value: <from ElevenLabs>
+      # - key: DEEPSEEK_API_KEY
+      #   value: <from DeepSeek>
+      # - key: APP_URL
+      #   value: <Render URL after deploy>

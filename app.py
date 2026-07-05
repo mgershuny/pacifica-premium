@@ -361,8 +361,8 @@ def voice_incoming():
         resp = VoiceResponse()
         greeting = (
             "Hello! You've reached Pacifica Premium. This is your chauffeur service for "
-            "the Toronto area. I can help you with a booking, answer questions about our service, "
-            "or connect you with Musa. How can I help you today?"
+            "the Toronto area. I can help you book a ride or answer questions about our service. "
+            "How can I help you today?"
         )
         gather = _make_gather(greeting)
         resp.append(gather)

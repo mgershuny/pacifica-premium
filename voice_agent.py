@@ -297,8 +297,29 @@ def handle_conversation(session, user_speech):
 
 
 def _fallback_response(session, user_speech):
-    """Keyword-based fallback if LLM fails."""
+    """Keyword-based fallback if LLM fails. Context-aware — stays in booking flow if fields already collected."""
     text = user_speech.lower()
+    
+    # If we're already in a booking flow (have some fields), ask about the next missing field
+    if session.data:
+        missing = session.missing_fields
+        if missing:
+            next_field = missing[0]
+            prompts = {
+                "date": "What date do you need the ride?",
+                "time": "What time works for you?",
+                "pickup": "Where should we pick you up?",
+                "dropoff": "And where are you headed?",
+                "passengers": "How many passengers?",
+                "name": "What name should I put the booking under?",
+                "phone": "And a phone number?",
+                "payment": "Will that be credit card, PayPal, or cash?",
+            }
+            return {"say": f"I didn't quite catch that. {prompts.get(next_field, 'Can you tell me more?')}",
+                    "is_complete": False, "needs_transfer": False, "farewell": False, "booking_data": None}
+        # All fields collected but LLM failed on confirmation
+        return {"say": "I'm sorry, I didn't catch that. Is everything correct?",
+                "is_complete": False, "needs_transfer": False, "farewell": False, "booking_data": None}
     
     # Transfer
     if any(w in text for w in ["musa", "owner", "manager", "talk to", "speak to", "transfer", "human"]):
@@ -333,7 +354,7 @@ def _fallback_response(session, user_speech):
                     "is_complete": False, "needs_transfer": False, "farewell": False, "booking_data": None}
     
     # Generic fallback
-    return {"say": "I'm sorry, I didn't catch that. Can you tell me what you need? A ride, rates, or to speak to Musa?",
+    return {"say": "I'm sorry, I didn't quite catch that. Are you looking to book a ride or check our rates?",
             "is_complete": False, "needs_transfer": False, "farewell": False, "booking_data": None}
 
 
