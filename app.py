@@ -644,7 +644,13 @@ def reminders_check():
     if pw != CONFIRM_TOKEN[:8]:
         return jsonify({'error': 'unauthorized'}), 403
 
-    now = datetime.utcnow()
+    from datetime import timezone, timedelta as tdelta
+    edt = timezone(tdelta(hours=-4))
+    now_local = datetime.now(edt)
+
+    # Tomorrow's date for the "next day's schedule" check
+    tomorrow = (now_local + tdelta(days=1)).strftime('%Y-%m-%d')
+
     reminders_sent = _load_reminders()
     sent = 0
 
@@ -656,42 +662,39 @@ def reminders_check():
         if b.get('status') not in ('confirmed', 'paid'):
             continue
 
-        # Parse booking date+time
+        bdate = b.get('date', '')
+        btime = b.get('time', '')
         try:
-            bdate = b.get('date', '')
-            btime = b.get('time', '')
-            # Handle various date formats
+            # Normalise booking date to YYYY-MM-DD
             bdt = None
-            for fmt in ['%B %d, %Y %I:%M', '%Y-%m-%d %H:%M', '%B %d %Y %I:%M %p', '%b %d, %Y %I:%M %p']:
+            for fmt in ['%B %d, %Y', '%Y-%m-%d', '%B %d %Y', '%b %d, %Y']:
                 try:
-                    bdt = datetime.strptime(f"{bdate} {btime}", fmt)
+                    bdt = datetime.strptime(bdate, fmt)
                     break
                 except:
                     continue
             if bdt is None:
                 continue
-            # Make timezone-aware (EDT)
-            from datetime import timezone, timedelta as tdelta
-            edt = timezone(tdelta(hours=-4))
-            bdt = bdt.replace(tzinfo=edt)
-            now_local = datetime.now(edt)
-            diff = (bdt - now_local).total_seconds()
-            # Send reminder if 12-24 hours before
-            if 43200 <= diff <= 86400:
-                phone = b.get('phone', '')
-                if phone:
-                    msg = (
-                        f"Reminder: Your Pacifica Premium ride is tomorrow! "
-                        f"Ref: {bid}. "
-                        f"{bdate} at {btime}. "
-                        f"{b.get('pickup','')} \u2192 {b.get('dropoff','')}. "
-                        f"Reply or call if anything changes."
-                    )
-                    send_sms(phone, msg)
-                    _save_reminder(bid)
-                    sent += 1
+            bdate_norm = bdt.strftime('%Y-%m-%d')
         except:
-            pass
+            continue
+
+        # Only send reminders for tomorrow's rides
+        if bdate_norm != tomorrow:
+            continue
+
+        phone = b.get('phone', '')
+        if phone:
+            msg = (
+                f"Reminder: Your Pacifica Premium ride is tomorrow! "
+                f"Ref: {bid}. "
+                f"{bdate} at {btime}. "
+                f"{b.get('pickup','')} \u2192 {b.get('dropoff','')}. "
+                f"Reply or call if anything changes."
+            )
+            send_sms(phone, msg)
+            _save_reminder(bid)
+            sent += 1
 
     return jsonify({'reminders_sent': sent, 'total_checked': len(bookings)})
 
