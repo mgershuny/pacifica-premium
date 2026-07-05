@@ -40,3 +40,6 @@ services:
       #   value: <from DeepSeek>
       # - key: APP_URL
       #   value: <Render URL after deploy>
+      # ─── GOOGLE CALENDAR AUTH (base64-encoded google_token.json) ───
+      # - key: GOOGLE_TOKEN_B64
+      #   value: <base64 of ~/.hermes/google_token.json>

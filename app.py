@@ -85,6 +85,26 @@ ALL_CALENDARS = {
     "holidays": "en.canadian#holiday@group.v.calendar.google.com",
 }
 
+def _get_calendar_service():
+    """Get authenticated Google Calendar service. Uses GOOGLE_TOKEN_B64 env var or local token file."""
+    import base64
+    token_b64 = os.getenv('GOOGLE_TOKEN_B64')
+    if token_b64:
+        token_json = base64.b64decode(token_b64).decode('utf-8')
+        cd = json.loads(token_json)
+    else:
+        token_path = os.path.expanduser('~/.hermes/google_token.json')
+        with open(token_path) as f:
+            cd = json.load(f)
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+    creds = Credentials(
+        token=cd['token'], refresh_token=cd['refresh_token'],
+        token_uri='https://oauth2.googleapis.com/token',
+        client_id=cd['client_id'], client_secret=cd['client_secret']
+    )
+    return build('calendar', 'v3', credentials=creds)
+
 @app.route('/api/availability')
 def availability():
     """Return available time slots for a date. Checks all 5 calendars for busy periods."""
@@ -104,15 +124,7 @@ def availability():
         time_max = dtmod.datetime(date.year, date.month, date.day, 23, 0, tzinfo=tz)
         now = dtmod.datetime.now(tz)
 
-        token_path = os.path.expanduser('~/.hermes/google_token.json')
-        with open(token_path) as f:
-            cd = json.load(f)
-        creds = Credentials(
-            token=cd['token'], refresh_token=cd['refresh_token'],
-            token_uri='https://oauth2.googleapis.com/token',
-            client_id=cd['client_id'], client_secret=cd['client_secret']
-        )
-        service = build('calendar', 'v3', credentials=creds)
+        service = _get_calendar_service()
 
         items = [{"id": cid} for cid in ALL_CALENDARS.values() if cid]
         body = {"timeMin": time_min.isoformat(), "timeMax": time_max.isoformat(), "items": items}
@@ -158,19 +170,7 @@ def availability():
 # ─── Google Calendar event ───
 def create_calendar_event(booking):
     try:
-        from google.oauth2.credentials import Credentials
-        from googleapiclient.discovery import build
-
-        token_path = os.path.expanduser('~/.hermes/google_token.json')
-        with open(token_path) as f:
-            cd = json.load(f)
-
-        creds = Credentials(
-            token=cd['token'], refresh_token=cd['refresh_token'],
-            token_uri='https://oauth2.googleapis.com/token',
-            client_id=cd['client_id'], client_secret=cd['client_secret']
-        )
-        service = build('calendar', 'v3', credentials=creds)
+        service = _get_calendar_service()
 
         start_dt = f"{booking['date']}T{booking['time']}:00"
         import datetime as dtmod
