@@ -9,7 +9,7 @@ from twilio.twiml.voice_response import VoiceResponse, Gather
 from twilio.rest import Client
 from voice_agent import (
     get_or_create_session, handle_conversation, synthesize_speech,
-    get_caller_name, calculate_drive_time
+    get_caller_name, get_caller_addresses, calculate_drive_time
 )
 
 app = Flask(__name__, static_folder='.', static_url_path='')
@@ -481,8 +481,10 @@ def voice_incoming():
         if caller_name:
             first = caller_name.split()[0]  # First name only
             session.returning_name = caller_name  # Store full name
+            # Also load saved addresses for this caller
+            session.saved_addresses = get_caller_addresses(caller)
             greeting = (
-                f"Hello, {first}. Is this {first} calling back? "
+                f"Hello, is this {first}? "
                 f"Would you like to book a ride?"
             )
         else:

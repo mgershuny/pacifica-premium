@@ -266,6 +266,7 @@ class BookingSession:
         self.data = {}
         self.travel_calc = {}  # {drive_minutes, arrival_buffer, suggested_pickup, arrival_by}
         self.returning_name = None  # Set by app.py when returning caller detected
+        self.saved_addresses = []  # Past pickup addresses for returning callers
         self.history = []  # list of {"role": "assistant"/"user", "content": "..."}
     
     @property
@@ -333,6 +334,20 @@ class BookingSession:
                 f"Airport buffer: {tc.get('arrival_buffer','?')} min. "
                 f"Suggested pickup: {tc.get('suggested_pickup','?')}. "
                 f"Arrive by: {tc.get('arrival_by','?')}."
+            )
+        
+        # Include saved addresses if pickup is still needed and caller has history
+        if not self.data.get("pickup") and self.saved_addresses:
+            addr_list = "\n".join(f"  {i+1}. \"{a}\"" for i, a in enumerate(self.saved_addresses))
+            state_msg += (
+                f"\n[Caller's saved addresses from past bookings]"
+                f"\n{addr_list}"
+                f"\nRULES FOR PICKUP ADDRESS:"
+                f"\n- If caller says 'from home', 'my house', 'my place', 'pick me up at home' — say: 'I have your address as [saved address #1]. Is that correct?'"
+                f"\n- If caller says 'same as before', 'same place', 'like last time', 'the usual' — say: 'That would be [saved address #1]. Is that right?'"
+                f"\n- If caller says 'my office', 'from work' — and you don't know their work address, say: 'I don't have an office address on file. What's the full address?'"
+                f"\n- If caller gives a specific address, use that directly (don't mention saved ones)."
+                f"\n- If caller confirms a saved address, set pickup to that address."
             )
         
         msgs.append({"role": "user", "content": state_msg})
@@ -615,3 +630,30 @@ def get_caller_name(phone):
     except:
         pass
     return None
+
+
+def get_caller_addresses(phone):
+    """Look up past pickup addresses for a caller by phone number.
+    
+    Returns a list of unique pickup addresses from past bookings, most recent first.
+    """
+    import json, os
+    bookings_file = os.path.join(os.path.dirname(__file__), 'bookings.json')
+    if not os.path.exists(bookings_file):
+        return []
+    norm = phone.replace('+1', '').replace('+', '').replace(' ', '').replace('-', '').replace('(', '').replace(')', '')
+    try:
+        with open(bookings_file) as f:
+            bookings = json.load(f)
+        addresses = []
+        seen = set()
+        for b in reversed(bookings):
+            bp = (b.get('phone', '') or '').replace('+1', '').replace('+', '').replace(' ', '').replace('-', '').replace('(', '').replace(')', '')
+            if norm in bp or bp in norm or (len(norm) > 6 and len(bp) > 6 and norm[-6:] == bp[-6:]):
+                addr = (b.get('pickup', '') or '').strip()
+                if addr and len(addr) > 3 and addr not in seen:
+                    addresses.append(addr)
+                    seen.add(addr)
+        return addresses
+    except:
+        return []
