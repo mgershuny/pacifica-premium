@@ -302,10 +302,105 @@ def handle_conversation(session, user_speech):
 
 
 def _fallback_response(session, user_speech):
-    """Keyword-based fallback if LLM fails. Context-aware — stays in booking flow if fields already collected."""
-    text = user_speech.lower()
-    
-    # If we're already in a booking flow (have some fields), ask about the next missing field
+    """Fallback extraction + response if LLM fails. Uses regex to grab fields directly."""
+    text = user_speech.lower().strip()
+
+    # ─── Try to extract fields with regex ───
+    extracted = {}
+
+    # Time patterns: 3pm, 3:00, 3 o'clock, noon, midnight, 2:30pm, 3 in the afternoon
+    time_pats = [
+        r'(\d{1,2}):(\d{2})\s*(pm|am|p\.m\.|a\.m\.)',  # 3:00pm, 2:30 AM
+        r'(\d{1,2})\s*(pm|am|p\.m\.|a\.m\.|:00)',       # 3pm, 3 am, 3:00
+        r'(\d{1,2})\s*o\'?clock',                         # 3 o'clock
+        r'(noon|midnight|midday)',                         # noon, midnight
+        r'(\d{1,2})\s*in\s*the\s*(morning|afternoon|evening)',  # 3 in the afternoon
+    ]
+    for pat in time_pats:
+        m = re.search(pat, text)
+        if m:
+            grps = m.groups()
+            if grps[0] in ('noon', 'midnight', 'midday'):
+                extracted['time'] = grps[0].title()
+            elif ':' in m.group(0):
+                h, mm, suf = grps
+                extracted['time'] = f"{h}:{mm}{suf}".upper().replace(' ', '')
+            elif grps[-1] in ('morning', 'afternoon', 'evening'):
+                extracted['time'] = f"{grps[0]}{' AM' if grps[-1]=='morning' else ' PM'}"
+            else:
+                h, suf = grps[0], (grps[1] if len(grps) > 1 else 'PM').upper()
+                extracted['time'] = f"{h} {suf}"
+            break
+
+    # Date patterns: monday, friday, july 10th, tomorrow, next week
+    days = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday']
+    months = ['january','february','march','april','may','june','july','august','september','october','november','december']
+    if 'tomorrow' in text or 'tomorow' in text:
+        extracted['date'] = 'tomorrow'
+    elif 'today' in text:
+        extracted['date'] = 'today'
+    else:
+        for d in days:
+            if d in text:
+                extracted['date'] = d.title()
+                break
+        for m in months:
+            if m in text:
+                # Try to extract "July 10th" or "July 10"
+                dm = re.search(r'(%s)\s+(\d{1,2})(?:st|nd|rd|th)?' % m, text)
+                if dm:
+                    extracted['date'] = f"{dm.group(1).title()} {dm.group(2)}"
+                else:
+                    extracted['date'] = m.title()
+                break
+
+    # Passengers: "3 people", "2 passengers", "for 4"
+    pm = re.search(r'(\d+)\s*(?:people|passengers|pax|adults?|guests?)', text)
+    if pm:
+        extracted['passengers'] = pm.group(1)
+
+    # Phone: basic North American pattern
+    ph = re.search(r'(\+?1?\s*\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})', text)
+    if ph:
+        extracted['phone'] = ph.group(1).strip()
+
+    # Name: anything after "name is" or "it's" or "this is"
+    nm = re.search(r'(?:name\'?s|name is|this is|it\'?s)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)', user_speech)
+    if nm:
+        extracted['name'] = nm.group(1).strip().title()
+
+    # Pickup: "at [location]", "from [location]", "pick me up at [location]"
+    pk = re.search(r'(?:at|from|pick\s+(?:me\s+)?up\s+(?:at|from)?)\s+(.+?)(?:\s+(?:to|and|going|for|at)\s+|$)', user_speech)
+    if pk and len(pk.group(1)) > 3:
+        extracted['pickup'] = pk.group(1).strip().rstrip('.,')
+
+    # Dropoff: "to [destination]", "going to [destination]", "headed to"
+    dr = re.search(r'(?:(?:going|headed|need|get)\s+)?(?:to)\s+(.+?)(?:\.|$)', user_speech)
+    if dr and len(dr.group(1)) > 3:
+        extracted['dropoff'] = dr.group(1).strip().rstrip('.,')
+
+    # Payment method
+    if any(w in text for w in ['cash']):
+        extracted['payment'] = 'cash'
+    elif any(w in text for w in ['credit', 'visa', 'mastercard', 'card', 'debit']):
+        extracted['payment'] = 'credit card'
+    elif any(w in text for w in ['paypal']):
+        extracted['payment'] = 'PayPal'
+
+    # Trip type
+    if any(w in text for w in ['airport', 'pearson', 'yyz', 'ytz', 'billy', 'billy bishop']):
+        extracted['trip_type'] = 'airport'
+    elif any(w in text for w in ['long', 'distance', 'far']):
+        extracted['trip_type'] = 'long distance'
+    elif any(w in text for w in ['event', 'night', 'party', 'concert', 'dinner']):
+        extracted['trip_type'] = 'event'
+
+    # ─── Apply extracted fields ───
+    for k, v in extracted.items():
+        if v and k in BOOKING_FIELDS:
+            session.data[k] = v
+
+    # ─── Now respond based on current state ───
     if session.data:
         missing = session.missing_fields
         if missing:
@@ -313,42 +408,7 @@ def _fallback_response(session, user_speech):
             prompts = {
                 "date": "What date do you need the ride?",
                 "time": "What time works for you?",
-                "pickup": "Where should we pick you up?",
-                "dropoff": "And where are you headed?",
-                "passengers": "How many passengers?",
-                "name": "What name should I put the booking under?",
-                "phone": "And a phone number?",
-                "payment": "Will that be credit card, PayPal, or cash?",
-            }
-            return {"say": f"I didn't quite catch that. {prompts.get(next_field, 'Can you tell me more?')}",
-                    "is_complete": False, "needs_transfer": False, "farewell": False, "booking_data": None}
-        # All fields collected but LLM failed on confirmation
-        return {"say": "I'm sorry, I didn't catch that. Is everything correct?",
-                "is_complete": False, "needs_transfer": False, "farewell": False, "booking_data": None}
-    
-    # Transfer
-    if any(w in text for w in ["musa", "owner", "manager", "talk to", "speak to", "transfer", "human"]):
-        return {"say": "One moment please, I'll transfer you to Musa.", "is_complete": False,
-                "needs_transfer": True, "farewell": False, "booking_data": None}
-    
-    # Farewell
-    if any(w in text for w in ["bye", "goodbye", "thank you", "thanks", "that's all", "that is all"]):
-        return {"say": "You're welcome! Have a great day!", "is_complete": False,
-                "needs_transfer": False, "farewell": True, "booking_data": None}
-    
-    # FAQ
-    if any(w in text for w in ["rate", "price", "cost", "how much", "$"]):
-        return {"say": "Our airport rate is $45 to YYZ, $40 to YTZ. Long distance from $75, events $55. All in CAD.", 
-                "is_complete": False, "needs_transfer": False, "farewell": False, "booking_data": None}
-    
-    # Booking intent
-    if any(w in text for w in ["book", "ride", "airport", "pick me", "need a ride", "schedule"]):
-        if session.missing_fields:
-            next_field = session.missing_fields[0]
-            prompts = {
-                "date": "What date do you need the ride?",
-                "time": "What time works for you?",
-                "pickup": "Where should we pick you up?",
+                "pickup": "Where should I pick you up?",
                 "dropoff": "And where are you headed?",
                 "passengers": "How many passengers?",
                 "name": "What name should I put the booking under?",
@@ -357,8 +417,42 @@ def _fallback_response(session, user_speech):
             }
             return {"say": prompts.get(next_field, "Can you tell me more?"),
                     "is_complete": False, "needs_transfer": False, "farewell": False, "booking_data": None}
-    
-    # Generic fallback
+        return {"say": "Let me confirm: is everything correct?",
+                "is_complete": False, "needs_transfer": False, "farewell": False, "booking_data": None}
+
+    # ─── Transfer ───
+    if any(w in text for w in ["musa", "owner", "manager", "talk to", "speak to", "transfer", "human"]):
+        return {"say": "One moment please, I'll transfer you to Musa.", "is_complete": False,
+                "needs_transfer": True, "farewell": False, "booking_data": None}
+
+    # ─── Farewell ───
+    if any(w in text for w in ["bye", "goodbye", "thank you", "thanks", "that's all", "that is all"]):
+        return {"say": "You're welcome! Have a great day!", "is_complete": False,
+                "needs_transfer": False, "farewell": True, "booking_data": None}
+
+    # ─── FAQ ───
+    if any(w in text for w in ["rate", "price", "cost", "how much", "$"]):
+        return {"say": "Our airport rate is $45 to YYZ, $40 to YTZ. Long distance from $75, events $55. All in CAD.",
+                "is_complete": False, "needs_transfer": False, "farewell": False, "booking_data": None}
+
+    # ─── Booking intent ───
+    if any(w in text for w in ["book", "ride", "airport", "pick me", "need a ride", "schedule"]):
+        if session.missing_fields:
+            next_field = session.missing_fields[0]
+            prompts = {
+                "date": "What date do you need the ride?",
+                "time": "What time works for you?",
+                "pickup": "Where should I pick you up?",
+                "dropoff": "And where are you headed?",
+                "passengers": "How many passengers?",
+                "name": "What name should I put the booking under?",
+                "phone": "And a phone number?",
+                "payment": "Will that be credit card, PayPal, or cash?",
+            }
+            return {"say": prompts.get(next_field, "Can you tell me more?"),
+                    "is_complete": False, "needs_transfer": False, "farewell": False, "booking_data": None}
+
+    # ─── Generic ───
     return {"say": "I'm sorry, I didn't quite catch that. Are you looking to book a ride or check our rates?",
             "is_complete": False, "needs_transfer": False, "farewell": False, "booking_data": None}
 
