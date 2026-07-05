@@ -624,6 +624,7 @@ def voice_end():
 
 # ─── Reminder Check Endpoint ───
 REMINDER_FILE = os.path.join(os.path.dirname(__file__), 'reminders_sent.json')
+REMINDER_2HR_FILE = os.path.join(os.path.dirname(__file__), 'reminders_2hr.json')
 
 def _load_reminders():
     if os.path.exists(REMINDER_FILE):
@@ -697,6 +698,147 @@ def reminders_check():
             sent += 1
 
     return jsonify({'reminders_sent': sent, 'total_checked': len(bookings)})
+
+
+# ─── 2-Hour Reminder ───
+def _load_reminders_2hr():
+    if os.path.exists(REMINDER_2HR_FILE):
+        with open(REMINDER_2HR_FILE) as f:
+            return json.load(f)
+    return []
+
+def _save_reminder_2hr(booking_id):
+    reminders = _load_reminders_2hr()
+    reminders.append(booking_id)
+    with open(REMINDER_2HR_FILE, 'w') as f:
+        json.dump(reminders, f)
+
+def _cancel_token(booking_id):
+    """Short unique cancel token from booking ID + secret."""
+    return hashlib.sha256(f"{booking_id}:{CONFIRM_TOKEN}".encode()).hexdigest()[:12]
+
+@app.route('/api/cancel/<booking_id>')
+def cancel_booking(booking_id):
+    """One-click cancel from SMS link. Validates token, cancels, notifies MG."""
+    token = request.args.get('token', '')
+    expected = _cancel_token(booking_id)
+    if token != expected:
+        return '<h1>Invalid cancel link</h1><p>This link is invalid or expired.</p>', 403
+
+    booking = get_booking(booking_id)
+    if not booking:
+        return '<h1>Booking not found</h1>', 404
+    if booking['status'] == 'cancelled':
+        return '<h1>Already Cancelled</h1><p>This booking was already cancelled.</p>'
+
+    update_booking(booking_id, {'status': 'cancelled'})
+
+    # Notify MG
+    if MG_PHONE:
+        send_sms(MG_PHONE,
+            f"⚠️ Ride Cancelled by customer! Ref: {booking_id}. "
+            f"{booking.get('name','')} — {booking.get('date','')} at {booking.get('time','')}. "
+            f"{booking.get('pickup','')} \u2192 {booking.get('dropoff','')}")
+
+    return """<!DOCTYPE html><html><body style="font-family:sans-serif;padding:2rem;background:#0a0a0a;color:#f0f0f0;text-align:center">
+<h1 style="color:#e74c3c">❌ Cancelled</h1>
+<p>Your Pacifica Premium ride has been cancelled.</p>
+<p style="color:#888">If this was a mistake, please call MG directly.</p>
+</body></html>"""
+
+@app.route('/api/reminders/2hr')
+def reminders_2hr():
+    """Check for bookings ~2 hours out and send SMS with cancel + call links. Run every 30 min."""
+    pw = request.args.get('pw', '')
+    if pw != CONFIRM_TOKEN[:8]:
+        return jsonify({'error': 'unauthorized'}), 403
+
+    from datetime import timezone, timedelta as tdelta
+    edt = timezone(tdelta(hours=-4))
+    now_local = datetime.now(edt)
+    today = now_local.strftime('%Y-%m-%d')
+
+    sent_list = _load_reminders_2hr()
+    sent = 0
+
+    bookings = load_bookings()
+    for b in bookings:
+        bid = b.get('id', '')
+        if bid in sent_list:
+            continue
+        if b.get('status') not in ('confirmed', 'paid'):
+            continue
+
+        bdate = b.get('date', '')
+        btime = b.get('time', '')
+        try:
+            bdt = None
+            for fmt in ['%B %d, %Y %I:%M', '%Y-%m-%d %H:%M', '%B %d %Y %I:%M %p', '%b %d, %Y %I:%M %p']:
+                try:
+                    bdt = datetime.strptime(f"{bdate} {btime}", fmt)
+                    break
+                except:
+                    continue
+            if bdt is None:
+                bdt = None
+                for fmt in ['%B %d, %Y', '%Y-%m-%d', '%B %d %Y', '%b %d, %Y']:
+                    try:
+                        bdt = datetime.strptime(bdate, fmt)
+                        break
+                    except:
+                        continue
+                if bdt is None:
+                    continue
+        except:
+            continue
+
+        bdate_norm = bdt.strftime('%Y-%m-%d')
+        if bdate_norm != today:
+            continue
+
+        # Parse time component
+        try:
+            for fmt in ['%I:%M', '%I:%M %p', '%H:%M']:
+                try:
+                    bt = datetime.strptime(btime.strip(), fmt)
+                    break
+                except:
+                    continue
+            else:
+                continue
+        except:
+            continue
+
+        booking_dt = bdt.replace(hour=bt.hour, minute=bt.minute, tzinfo=edt)
+        mins_until = (booking_dt - now_local).total_seconds() / 60
+
+        # Send if 90-150 minutes before (covers every-30min cron)
+        if not (90 <= mins_until <= 150):
+            continue
+
+        phone = b.get('phone', '')
+        if not phone:
+            continue
+
+        cancel_url = f"{APP_URL}/api/cancel/{bid}?token={_cancel_token(bid)}"
+        call_link = f"tel:{MG_PHONE.replace('+','').replace(' ','')}"
+        # Clean up for display
+        call_display = MG_PHONE if MG_PHONE else "647-686-4540"
+
+        msg = (
+            f"Your Pacifica Premium ride is in 2 hours! "
+            f"Ref: {bid}. "
+            f"{bdate} at {btime}. "
+            f"{b.get('pickup','')} \u2192 {b.get('dropoff','')}.\n"
+            f"\n"
+            f"Need to cancel? {cancel_url}\n"
+            f"Need anything else? Call MG: {call_display}"
+        )
+        send_sms(phone, msg)
+        _save_reminder_2hr(bid)
+        sent += 1
+
+    return jsonify({'reminders_2hr_sent': sent, 'total_checked': len(bookings)})
 
 
 # ─── SMS confirmation for web bookings ───
