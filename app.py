@@ -9,7 +9,7 @@ from twilio.twiml.voice_response import VoiceResponse, Gather
 from twilio.rest import Client
 from voice_agent import (
     get_or_create_session, handle_conversation, synthesize_speech,
-    get_caller_name
+    get_caller_name, calculate_drive_time
 )
 
 app = Flask(__name__, static_folder='.', static_url_path='')
@@ -518,6 +518,34 @@ def voice_response():
 
         # LLM handles everything — booking in any order, FAQ, transfers, goodbye
         result = handle_conversation(session, speech)
+
+        # ─── Travel time calculation: flight time → smart pickup time ───
+        if result.get("needs_travel_calc"):
+            pickup = session.data.get("pickup", "")
+            dropoff = session.data.get("dropoff", "")
+            flight_time_str = session.data.get("flight_time", "")
+            if pickup and dropoff and flight_time_str:
+                drive_min = calculate_drive_time(pickup, dropoff)
+                if drive_min is not None:
+                    is_intl = any(w in dropoff.lower() for w in ["pearson", "yyz", "international"])
+                    arrival_buffer = 180 if is_intl else 120
+                    ft_parsed = None
+                    for fmt in ['%I:%M %p', '%I %p', '%H:%M']:
+                        try:
+                            ft_parsed = datetime.strptime(flight_time_str.strip().upper().replace('.',''), fmt)
+                            break
+                        except:  # noqa
+                            continue
+                    if ft_parsed:
+                        from datetime import timedelta  # noqa: already imported at top
+                        arrival_dt = ft_parsed - timedelta(minutes=arrival_buffer)
+                        pickup_dt = arrival_dt - timedelta(minutes=drive_min)
+                        session.travel_calc = {
+                            'drive_minutes': drive_min,
+                            'arrival_buffer': arrival_buffer,
+                            'suggested_pickup': pickup_dt.strftime('%I:%M %p').lstrip('0'),
+                            'arrival_by': arrival_dt.strftime('%I:%M %p').lstrip('0'),
+                        }
 
         if result.get("needs_transfer"):
             if MG_PHONE and MG_PHONE != 'PLACEHOLDER':

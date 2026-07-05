@@ -5,6 +5,7 @@ Uses DeepSeek API for intelligent extraction and response generation.
 """
 
 import os, json, re, uuid, hashlib, urllib.request, urllib.error
+import requests
 from datetime import datetime, date
 
 # ─── Config ───
@@ -18,6 +19,41 @@ AUDIO_DIR = os.path.join(os.path.dirname(__file__), 'audio')
 
 # ─── Today's date for LLM context ───
 TODAY_DATE = datetime.now().strftime("%A, %B %d, %Y")
+
+# ─── Travel Time Calculator (free, no API key) ───
+
+def geocode(address):
+    """Geocode an address to (lat, lng) using Nominatim."""
+    try:
+        url = "https://nominatim.openstreetmap.org/search"
+        params = {"q": address, "format": "json", "limit": 1}
+        resp = requests.get(url, params=params,
+                            headers={"User-Agent": "PacificaPremium/1.0"},
+                            timeout=10)
+        data = resp.json()
+        if data:
+            return float(data[0]["lat"]), float(data[0]["lon"])
+    except Exception as e:
+        print(f"[geocode] Error: {e}")
+    return None
+
+def calculate_drive_time(pickup, dropoff):
+    """Get driving time in minutes between two addresses using OSRM. Returns int or None."""
+    try:
+        origin = geocode(pickup)
+        dest = geocode(dropoff)
+        if not origin or not dest:
+            return None
+        url = (f"https://router.project-osrm.org/route/v1/driving/"
+               f"{origin[1]},{origin[0]};{dest[1]},{dest[0]}?overview=false")
+        resp = requests.get(url, timeout=10)
+        data = resp.json()
+        if data.get("code") == "Ok":
+            seconds = data["routes"][0]["duration"]
+            return int(seconds / 60)
+    except Exception as e:
+        print(f"[drive_time] Error: {e}")
+    return None
 
 # ─── ElevenLabs TTS ───
 
@@ -74,8 +110,9 @@ BOOKING_FIELDS = {
     "time": "Time of pickup (e.g. 3 PM, 15:00)",
     "pickup": "Pickup address or location",
     "dropoff": "Dropoff destination",
-    "passengers": "Number of passengers (a number)",
+    "passengers": "Number of passengers (a number 1-6)",
     "trip_type": "Type: airport run, long distance, or event/night out",
+    "flight_time": "ONLY if caller mentions a flight departure time (e.g. 'my flight is at 5pm'). Extract this SEPARATELY from the pickup time.",
     "name": "Caller's full name for the booking",
     "phone": "Caller's phone number",
     "email": "Caller's email address",
@@ -102,6 +139,23 @@ Have a natural, flowing conversation. The caller can give info in ANY order — 
 - "I need a ride to the airport on Friday at 3pm for 3 people" → extracts date, time, dropoff, passengers, trip_type
 - "Pick me up at 123 Main Street" → extracts pickup
 - "Actually make it 4 people" → updates passengers
+
+PASSENGER COUNT RULES (CRITICAL — DO NOT GET THIS WRONG):
+- "just me", "just myself", "just 1", "by myself" → passengers = 1
+- "me and my wife", "my wife and I", "me and 1 other" → passengers = 2
+- "me and 2 others", "myself and 2 friends", "my wife and I and our son" → passengers = 3
+- "me and 3 others" → passengers = 4
+- Any number given literally: "3 people", "2 passengers" → that exact number
+- MAXIMUM 6 passengers (the vehicle holds 6 + the driver). If they say more than 6, say "I can take up to 6 passengers. Would you like to split into two trips or adjust?"
+
+FLIGHT TIME LOGIC (CRITICAL — SMART PICKUP TIMES):
+- When a caller mentions a flight departure time (e.g. "my flight leaves at 5pm", "I need to catch a 3pm flight"), extract it into the "flight_time" field.
+- Do NOT set the "time" field to the flight time — the "time" field is for PICKUP time, not flight time.
+- After you have flight_time AND pickup AND dropoff ALL three, set needs_travel_calc=true in your response. This triggers the system to calculate drive time and suggest an optimal pickup time.
+- The system will calculate: arrival_time = flight_time - airport_buffer (2h domestic, 3h international), then pickup_time = arrival_time - drive_time.
+- After the system calculates this, you'll receive the result in the next turn as a state update: "Travel calculation: pickup by [time], arrives [arrival_time], drive is [X] min."
+- Then suggest this to the caller: "Your flight is at 5pm, so you'd need to be at the airport by 3pm. With traffic, the drive takes about 45 minutes. I'll pick you up at 2:15pm. How does that sound?"
+- If they agree, set "time" to the calculated pickup time. If they want a different time, update it.
 
 Rules:
 1. Be CONCISE — 1-2 short sentences per response. Sound like a real person.
@@ -136,6 +190,7 @@ RESPOND WITH VALID JSON ONLY:
     "dropoff": "value or omit",
     "passengers": "value or omit",
     "trip_type": "value or omit",
+    "flight_time": "value or omit",
     "name": "value or omit",
     "phone": "value or omit",
     "email": "value or omit",
@@ -144,6 +199,7 @@ RESPOND WITH VALID JSON ONLY:
   "all_collected": false,
   "farewell": false,
   "transfer_to_musa": false,
+  "needs_travel_calc": false,
   "needs_clarification": null
 }}
 
@@ -207,6 +263,7 @@ class BookingSession:
         self.call_sid = call_sid
         self.state = "greeting"  # greeting, collecting, done
         self.data = {}
+        self.travel_calc = {}  # {drive_minutes, arrival_buffer, suggested_pickup, arrival_by}
         self.history = []  # list of {"role": "assistant"/"user", "content": "..."}
     
     @property
@@ -230,6 +287,7 @@ class BookingSession:
             "phone": self.data.get("phone", ""),
             "email": self.data.get("email", "phone@booking.com"),
             "payment_method": "cash" if "cash" in pmt else "credit_card",
+            "flight_time": self.data.get("flight_time", ""),
             "notes": "Booked via phone",
         }
     
@@ -254,6 +312,17 @@ class BookingSession:
         known = {k: v for k, v in self.data.items()}
         missing = self.missing_fields
         state_msg = f"[STATE] Known fields: {json.dumps(known)}\nMissing fields: {missing}"
+        
+        # Include travel calc if available
+        if self.travel_calc:
+            tc = self.travel_calc
+            state_msg += (
+                f"\n[Travel calculation] Drive time: {tc.get('drive_minutes','?')} min. "
+                f"Airport buffer: {tc.get('arrival_buffer','?')} min. "
+                f"Suggested pickup: {tc.get('suggested_pickup','?')}. "
+                f"Arrive by: {tc.get('arrival_by','?')}."
+            )
+        
         msgs.append({"role": "user", "content": state_msg})
         
         return msgs
@@ -297,6 +366,7 @@ def handle_conversation(session, user_speech):
     is_complete = result.get("all_collected", False) or session.is_complete
     needs_transfer = result.get("transfer_to_musa", False)
     farewell = result.get("farewell", False)
+    needs_travel_calc = result.get("needs_travel_calc", False)
     
     # Add assistant response to history
     session.history.append({"role": "assistant", "content": say})
@@ -306,6 +376,7 @@ def handle_conversation(session, user_speech):
         "is_complete": is_complete,
         "needs_transfer": needs_transfer and not is_complete,
         "farewell": farewell,
+        "needs_travel_calc": needs_travel_calc and not is_complete,
         "booking_data": session.to_booking_data() if is_complete else None,
     }
     
@@ -365,10 +436,33 @@ def _fallback_response(session, user_speech):
                     extracted['date'] = m.title()
                 break
 
-    # Passengers: "3 people", "2 passengers", "for 4"
+    # Passengers: "3 people", "2 passengers", "for 4", "just me", "me and 2 others"
     pm = re.search(r'(\d+)\s*(?:people|passengers|pax|adults?|guests?)', text)
     if pm:
         extracted['passengers'] = pm.group(1)
+    elif re.search(r'\bjust\s*(?:me|myself)\b', text) or re.search(r'\bby\s*myself\b', text):
+        extracted['passengers'] = '1'
+    else:
+        # "me and X others", "myself and X", "my wife and I and..."
+        ma = re.search(r'(?:me|myself|my\s+\w+)\s+and\s+(\d+)\s+(?:others?|friends?|people|guests?)', text)
+        if ma:
+            extracted['passengers'] = str(int(ma.group(1)) + 1)
+        else:
+            ma2 = re.search(r'(?:me|myself)\s+and\s+(\d+)', text)
+            if ma2:
+                extracted['passengers'] = str(int(ma2.group(1)) + 1)
+
+    # Flight time: "flight at 5pm", "flight leaves at 3", "5pm flight"
+    ft = re.search(r'(?:flight|plane)\s+(?:at|leaves?|is|departs?|for)\s+(\d{1,2})(?::(\d{2}))?\s*(pm|am|p\.m\.|a\.m\.)?', text)
+    if not ft:
+        ft = re.search(r'(\d{1,2})(?::(\d{2}))?\s*(pm|am|p\.m\.|a\.m\.)?\s+(?:flight|plane)', text)
+    if ft:
+        h, m, suf = ft.groups()
+        suf = (suf or 'PM').upper().replace('.', '').replace(' ', '')
+        if m:
+            extracted['flight_time'] = f"{h}:{m} {suf}"
+        else:
+            extracted['flight_time'] = f"{h} {suf}"
 
     # Phone: basic North American pattern
     ph = re.search(r'(\+?1?\s*\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})', text)
