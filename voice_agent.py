@@ -78,6 +78,7 @@ BOOKING_FIELDS = {
     "trip_type": "Type: airport run, long distance, or event/night out",
     "name": "Caller's full name for the booking",
     "phone": "Caller's phone number",
+    "email": "Caller's email address",
     "payment": "Payment method: credit card, PayPal, or cash",
 }
 
@@ -107,14 +108,22 @@ Rules:
 2. Extract ANY booking fields the caller mentions, even if mixed with other conversation.
 3. If a field value changes ("actually", "correction", "make it"), update it.
 4. Only ask for fields that are still missing. Ask naturally. If they give you a date, follow up with what time — if they give you a time, mention the date if it's still missing. Always connect the two.
-5. If they ask a question about the company (rates, vehicle, areas, etc.), answer from the company info above.
-6. If they ask for Musa directly ("talk to Musa", "let me speak to Musa"), set transfer_to_musa=true.
-7. CONFIRMATION STEP — CRITICAL: When ALL fields have been collected for the FIRST time, DO NOT set all_collected=true yet. Instead, REPEAT BACK EVERYTHING clearly and ask for confirmation. For example: "Let me confirm everything: pickup at [address], going to [destination], on [date] at [time], [passengers] passengers, paid by [payment]. Is that all correct?"
-8. After presenting the confirmation, if the caller says "yes", "correct", "that's right", "looks good", or confirms — THEN set all_collected=true.
-9. If the caller says "no", "change", or corrects something — update that field and present the updated confirmation again.
-10. If they're done or say goodbye, set farewell=true.
-11. If you can't understand them, ask a clarifying question.
-12. Keep your responses BRIEF — this is a phone call, not a chat.
+5. CONFIRM EACH FIELD — When the caller provides a piece of information, repeat it back to confirm before moving on. For example:
+   - They say "Friday" → "Friday July 10th, got it. And what time?"
+   - They say "3pm" → "3 PM, noted. And where should I pick you up?"
+   - They say "cash" → "Cash, got it."
+   - They say "john@gmail.com" → "john@gmail.com, is that correct?"
+6. CONFIRM EMAIL — When they provide their email, repeat it back and ask them to confirm it's correct before saving it.
+7. CONFIRM PAYMENT — When they say cash, credit card, or PayPal, repeat it back for confirmation.
+8. If they ask a question about the company (rates, vehicle, areas, etc.), answer from the company info above.
+9. If they ask for Musa directly ("talk to Musa", "let me speak to Musa"), set transfer_to_musa=true.
+10. CONFIRMATION STEP — CRITICAL: When ALL fields have been collected for the FIRST time, DO NOT set all_collected=true yet. Instead, REPEAT BACK EVERYTHING clearly and ask for confirmation. For example: "Let me confirm everything: pickup at [address], going to [destination], on [date] at [time], [passengers] passengers, paid by [payment], confirmation to [email]. Is that all correct?"
+11. After presenting the confirmation, if the caller says "yes", "correct", "that's right", "looks good", or confirms — THEN set all_collected=true.
+12. If the caller says "no", "change", or corrects something — update that field and present the updated confirmation again.
+13. BOOKING COMPLETE — After all_collected=true, tell them they're all booked. Give them a booking reference (generate a short 6-character code like "PAC-ABC123"). Say they'll get a confirmation email at their email address. Ask if there's anything else they need.
+14. If they're done or say goodbye, set farewell=true.
+15. If you can't understand them, ask a clarifying question.
+16. Keep your responses BRIEF — this is a phone call, not a chat.
 
 RESPOND WITH VALID JSON ONLY:
 {{
@@ -128,6 +137,7 @@ RESPOND WITH VALID JSON ONLY:
     "trip_type": "value or omit",
     "name": "value or omit",
     "phone": "value or omit",
+    "email": "value or omit",
     "payment": "value or omit"
   }},
   "all_collected": false,
@@ -137,10 +147,10 @@ RESPOND WITH VALID JSON ONLY:
 }}
 
 IMPORTANT RULES:
-- Only include fields in "extracted" that the caller ACTUALLY provided in this turn. Omit fields they didn't mention.
-- If they provided info that contradicts what was previously given, the new value wins.
-- ALL_COLLECTED=true can ONLY be set AFTER confirmation — meaning the caller has explicitly confirmed all the details are correct. Do not shortcut this step.
-- After confirmation (all_collected=true), the booking is final. The caller can still say goodbye or ask questions but the booking is saved.
+|- Only include fields in "extracted" that the caller ACTUALLY provided in this turn. Omit fields they didn't mention.
+|- If they provided info that contradicts what was previously given, the new value wins.
+|- ALL_COLLECTED=true can ONLY be set AFTER confirmation — meaning the caller has explicitly confirmed all the details are correct. Do not shortcut this step.
+|- After confirmation (all_collected=true), the booking is final. Generate a booking reference like "PAC-" followed by 3 random uppercase letters and 3 random digits (e.g. "PAC-XRT742"). Tell the caller their booking reference and that they'll receive a confirmation email. The caller can still say goodbye or ask questions but the booking is saved.
 """
 
 
@@ -190,7 +200,7 @@ def call_llm(messages, retries=2):
 class BookingSession:
     """LLM-powered booking session. Collects fields in any order via conversation."""
     
-    REQUIRED_FIELDS = ["date", "time", "pickup", "dropoff", "passengers", "name", "phone", "payment"]
+    REQUIRED_FIELDS = ["date", "time", "pickup", "dropoff", "passengers", "name", "phone", "email", "payment"]
     
     def __init__(self, call_sid):
         self.call_sid = call_sid
@@ -217,7 +227,7 @@ class BookingSession:
             "trip": self._map_trip_type(self.data.get("trip_type", "")),
             "name": self.data.get("name", "Phone Booking"),
             "phone": self.data.get("phone", ""),
-            "email": "phone@booking.com",
+            "email": self.data.get("email", "phone@booking.com"),
             "payment_method": "cash" if "cash" in pmt else "credit_card",
             "notes": "Booked via phone",
         }
@@ -364,6 +374,11 @@ def _fallback_response(session, user_speech):
     if ph:
         extracted['phone'] = ph.group(1).strip()
 
+    # Email: basic email pattern
+    em = re.search(r'([\w.+-]+@[\w-]+\.[\w.]+)', user_speech)
+    if em:
+        extracted['email'] = em.group(1).strip()
+
     # Name: anything after "name is" or "it's" or "this is"
     nm = re.search(r'(?:name\'?s|name is|this is|it\'?s)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)', user_speech)
     if nm:
@@ -413,6 +428,7 @@ def _fallback_response(session, user_speech):
                 "passengers": "How many passengers?",
                 "name": "What name should I put the booking under?",
                 "phone": "And a phone number?",
+                "email": "And an email for your confirmation?",
                 "payment": "Will that be credit card, PayPal, or cash?",
             }
             return {"say": prompts.get(next_field, "Can you tell me more?"),
@@ -447,6 +463,7 @@ def _fallback_response(session, user_speech):
                 "passengers": "How many passengers?",
                 "name": "What name should I put the booking under?",
                 "phone": "And a phone number?",
+                "email": "And an email for your confirmation?",
                 "payment": "Will that be credit card, PayPal, or cash?",
             }
             return {"say": prompts.get(next_field, "Can you tell me more?"),
