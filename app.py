@@ -76,6 +76,85 @@ def send_email(to, subject, body_html):
         print(f"Email error: {e}")
         return False
 
+# ─── Calendar IDs for availability ───
+ALL_CALENDARS = {
+    "primary": "mgershuny@gmail.com",
+    "family": "family00535914979446525255@group.calendar.google.com",
+    "pacifica": os.getenv('PACIFICA_CALENDAR_ID', ''),
+    "celine": "oat9mdj24ateup8s3gqbsn01cs@group.calendar.google.com",
+    "holidays": "en.canadian#holiday@group.v.calendar.google.com",
+}
+
+@app.route('/api/availability')
+def availability():
+    """Return available time slots for a date. Checks all 5 calendars for busy periods."""
+    date_str = request.args.get('date', '')
+    if not date_str:
+        return jsonify({'error': 'date required'}), 400
+
+    try:
+        from google.oauth2.credentials import Credentials
+        from googleapiclient.discovery import build
+
+        import datetime as dtmod
+        date = dtmod.date.fromisoformat(date_str)
+        tz = dtmod.timezone(dtmod.timedelta(hours=-4))  # EDT
+
+        time_min = dtmod.datetime(date.year, date.month, date.day, 6, 0, tzinfo=tz)
+        time_max = dtmod.datetime(date.year, date.month, date.day, 23, 0, tzinfo=tz)
+        now = dtmod.datetime.now(tz)
+
+        token_path = os.path.expanduser('~/.hermes/google_token.json')
+        with open(token_path) as f:
+            cd = json.load(f)
+        creds = Credentials(
+            token=cd['token'], refresh_token=cd['refresh_token'],
+            token_uri='https://oauth2.googleapis.com/token',
+            client_id=cd['client_id'], client_secret=cd['client_secret']
+        )
+        service = build('calendar', 'v3', credentials=creds)
+
+        items = [{"id": cid} for cid in ALL_CALENDARS.values() if cid]
+        body = {"timeMin": time_min.isoformat(), "timeMax": time_max.isoformat(), "items": items}
+        result = service.freebusy().query(body=body).execute()
+
+        busy_periods = []
+        for cal_id, data in result.get('calendars', {}).items():
+            for period in data.get('busy', []):
+                busy_periods.append({'start': period['start'], 'end': period['end'], 'calendar': cal_id})
+        busy_periods.sort(key=lambda x: x['start'])
+
+        CALENDAR_LABELS = {v: k for k, v in ALL_CALENDARS.items()}
+
+        slots = []
+        current = time_min
+        while current < time_max:
+            slot_end = current + dtmod.timedelta(minutes=30)
+            s_iso, e_iso = current.isoformat(), slot_end.isoformat()
+
+            is_busy = False
+            busy_for = set()
+            for bp in busy_periods:
+                if s_iso < bp['end'] and e_iso > bp['start']:
+                    is_busy = True
+                    busy_for.add(CALENDAR_LABELS.get(bp['calendar'], bp['calendar'][:20]))
+            time_str = current.strftime('%H:%M')
+            is_past = time_str <= now.strftime('%H:%M') and date_str == now.strftime('%Y-%m-%d')
+
+            slots.append({
+                'time': time_str,
+                'available': not is_busy and not is_past,
+                'busy_calendars': list(busy_for),
+                'past': is_past,
+            })
+            current = slot_end
+
+        return jsonify({'date': date_str, 'slots': slots, 'busy_periods': busy_periods})
+    except Exception as e:
+        print(f"Availability error: {e}")
+        import traceback; traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 # ─── Google Calendar event ───
 def create_calendar_event(booking):
     try:

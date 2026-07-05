@@ -197,6 +197,48 @@
   .booking-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; align-items: start; }
   .calendar-embed { background: var(--surface); border-radius: var(--radius); overflow: hidden; border: 1px solid rgba(255,255,255,0.06); min-height: 400px; }
   .calendar-embed iframe { width: 100%; height: 500px; border: 0; }
+  
+  /* ─── Availability Calendar Widget ─── */
+  .avail-widget { background: var(--surface); border-radius: var(--radius); border: 1px solid rgba(255,255,255,0.06); overflow: hidden; }
+  .week-nav { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.5rem; background: var(--surface2); border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .week-nav .wn-btn { background: none; border: 1px solid rgba(255,255,255,0.15); color: var(--text); width: 36px; height: 36px; border-radius: 50%; cursor: pointer; font-size: 1.3rem; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+  .week-nav .wn-btn:hover { border-color: var(--gold); color: var(--gold); }
+  .week-nav .wn-label { font-size: 0.9rem; font-weight: 500; color: var(--text-muted); }
+  .week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0; }
+  .week-day { padding: 0.75rem 0.3rem; text-align: center; cursor: pointer; border-right: 1px solid rgba(255,255,255,0.04); border-bottom: 3px solid transparent; transition: all 0.2s; min-height: 90px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem; }
+  .week-day:last-child { border-right: none; }
+  .week-day:hover { background: rgba(200,164,110,0.05); }
+  .week-day.active { border-bottom-color: var(--gold); background: rgba(200,164,110,0.08); }
+  .week-day.past-day { opacity: 0.4; pointer-events: none; }
+  .week-day .day-name { font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em; }
+  .week-day .day-num { font-size: 1.3rem; font-weight: 500; line-height: 1; }
+  .week-day .day-status { font-size: 0.65rem; padding: 0.15rem 0.4rem; border-radius: 4px; font-weight: 500; }
+  .day-status.available { background: rgba(74,124,89,0.2); color: #6abf84; }
+  .day-status.busy { background: rgba(200,60,60,0.15); color: #e06060; }
+  .day-status.few { background: rgba(200,164,110,0.15); color: var(--gold); }
+  
+  .slot-panel { padding: 1.25rem 1.5rem; border-top: 1px solid rgba(255,255,255,0.06); }
+  .slot-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+  .slot-header h4 { font-size: 1rem; font-weight: 500; }
+  .slot-back { background: none; border: 1px solid rgba(255,255,255,0.15); color: var(--text-muted); padding: 0.3rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; transition: all 0.2s; }
+  .slot-back:hover { border-color: var(--gold); color: var(--gold); }
+  .slot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 0.5rem; max-height: 300px; overflow-y: auto; }
+  .slot-grid::-webkit-scrollbar { width: 6px; }
+  .slot-grid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+  .slot-item { padding: 0.6rem 0.3rem; border-radius: 6px; text-align: center; font-size: 0.8rem; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; font-weight: 500; }
+  .slot-item.avail { background: rgba(74,124,89,0.15); border-color: rgba(74,124,89,0.3); color: #6abf84; }
+  .slot-item.avail:hover { background: rgba(74,124,89,0.3); border-color: #6abf84; transform: scale(1.05); }
+  .slot-item.busy-slot { background: rgba(60,60,60,0.3); color: rgba(255,255,255,0.2); cursor: not-allowed; }
+  .slot-item.past { background: rgba(60,60,60,0.15); color: rgba(255,255,255,0.1); cursor: not-allowed; }
+  .slot-item.selected { background: var(--gold); color: #0a0a0a; border-color: var(--gold); }
+  .slot-loading { text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.9rem; }
+  .slot-empty { text-align: center; padding: 2rem; color: var(--text-muted); }
+  .selected-badge { display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(200,164,110,0.15); padding: 0.5rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem; }
+  .selected-badge .clear-sel { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.1rem; padding: 0 0.3rem; }
+  .selected-badge .clear-sel:hover { color: #e06060; }
+
+  #selectedTimeDisplay { display: none; }
+  #date, #time { display: none; } /* Hide raw inputs, use widget instead */
   .booking-form {
     background: var(--surface); border-radius: var(--radius);
     border: 1px solid rgba(255,255,255,0.06); padding: 2rem;
@@ -386,23 +428,33 @@
     </div>
     <div class="booking-wrap">
       <div>
-        <div class="calendar-embed">
-          <iframe src="https://calendar.google.com/calendar/embed?src=708f34521ae94fc8a576210a522a7827a27b1a5157fa91d7c3ca1ddf1b1a4de4%40group.calendar.google.com&ctz=America/Toronto&showNav=1&showDate=1&showTabs=0&showCalendars=0&mode=WEEK" style="border: 0; width: 100%; height: 500px;" frameborder="0" scrolling="no"></iframe>
+        <div class="avail-widget">
+          <div class="week-nav">
+            <button class="wn-btn" id="prevWeek">‹</button>
+            <span class="wn-label" id="weekLabel">This Week</span>
+            <button class="wn-btn" id="nextWeek">›</button>
+          </div>
+          <div class="week-grid" id="weekGrid"></div>
+          <div class="slot-panel" id="slotPanel" style="display:none;">
+            <div class="slot-header">
+              <h4>Available times for <span id="slotDateLabel"></span></h4>
+              <button class="slot-back" id="slotBack">← Back</button>
+            </div>
+            <div class="slot-loading" id="slotLoading">Loading availability...</div>
+            <div class="slot-grid" id="slotGrid" style="display:none;"></div>
+            <div class="slot-empty" id="slotEmpty" style="display:none;">No available times this day.</div>
+          </div>
         </div>
       </div>
       <div>
         <form class="booking-form" id="bookingForm" style="scroll-margin-top: 20px;">
           <h3>Request a Ride</h3>
           <p class="muted" style="font-size: 0.85rem; margin-bottom: 1.5rem;">Fill this out and I'll confirm within the hour. Or call to book with my AI assistant.</p>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="date">Date</label>
-              <input type="date" id="date" required>
-            </div>
-            <div class="form-group">
-              <label for="time">Time</label>
-              <input type="time" id="time" required>
-            </div>
+          <input type="hidden" id="date" name="date">
+          <input type="hidden" id="time" name="time">
+          <div id="selectedTimeDisplay" style="display:none;" class="selected-badge">
+            <span>📅 <span id="selectedDateText"></span> at <span id="selectedTimeText"></span></span>
+            <button class="clear-sel" id="clearSelection" title="Change time">✕</button>
           </div>
           <div class="form-group">
             <label for="name">Your Name</label>
@@ -601,6 +653,230 @@ document.getElementById('bookingForm').addEventListener('submit', async function
     console.error(err);
   }
 });
+
+// ═══ Availability Calendar Widget ═══
+const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const SLOT_TIMES = [];
+for (let h = 6; h < 23; h++) {
+  SLOT_TIMES.push(`${String(h).padStart(2,'0')}:00`);
+  SLOT_TIMES.push(`${String(h).padStart(2,'0')}:30`);
+}
+
+let currentWeekStart = getMonday(new Date());
+let selectedDate = null;
+let cachedAvailability = {};
+
+function getMonday(d) {
+  d = new Date(d);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function addDays(d, n) {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+
+function formatDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function isToday(d) {
+  const t = new Date();
+  return d.getFullYear() === t.getFullYear() && d.getMonth() === t.getMonth() && d.getDate() === t.getDate();
+}
+
+function isPast(d) {
+  const t = new Date();
+  t.setHours(0,0,0,0);
+  return d < t;
+}
+
+function renderWeek() {
+  const grid = document.getElementById('weekGrid');
+  const label = document.getElementById('weekLabel');
+  const start = currentWeekStart;
+  const end = addDays(start, 6);
+  label.textContent = `${MONTHS[start.getMonth()]} ${start.getDate()} – ${MONTHS[end.getMonth()]} ${end.getDate()}`;
+
+  grid.innerHTML = '';
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(start, i);
+    const dateStr = formatDate(d);
+    const dayDiv = document.createElement('div');
+    dayDiv.className = 'week-day' + (isPast(d) ? ' past-day' : '') + (selectedDate === dateStr ? ' active' : '');
+    dayDiv.dataset.date = dateStr;
+    dayDiv.innerHTML = `<div class="day-name">${DAYS[d.getDay()]}</div><div class="day-num">${d.getDate()}</div><div class="day-status" id="status-${dateStr}">—</div>`;
+    if (!isPast(d)) {
+      dayDiv.addEventListener('click', () => selectDay(dateStr));
+    }
+    grid.appendChild(dayDiv);
+
+    if (!isPast(d) && !cachedAvailability[dateStr]) {
+      fetchAvailability(dateStr);
+    }
+  }
+}
+
+async function fetchAvailability(dateStr) {
+  try {
+    const res = await fetch(`/api/availability?date=${dateStr}`);
+    const data = await res.json();
+    cachedAvailability[dateStr] = data;
+    updateDayStatus(dateStr);
+    if (selectedDate === dateStr) showSlots(dateStr);
+  } catch (e) {
+    console.error('Failed to fetch availability:', e);
+    const statusEl = document.getElementById('status-' + dateStr);
+    if (statusEl) statusEl.textContent = 'err';
+  }
+}
+
+function updateDayStatus(dateStr) {
+  const data = cachedAvailability[dateStr];
+  const el = document.getElementById('status-' + dateStr);
+  if (!el || !data) return;
+  const avail = data.slots.filter(s => s.available).length;
+  if (avail === 0) {
+    el.textContent = 'Full';
+    el.className = 'day-status busy';
+  } else if (avail <= 6) {
+    el.textContent = `${avail} open`;
+    el.className = 'day-status few';
+  } else {
+    el.textContent = `${avail} open`;
+    el.className = 'day-status available';
+  }
+}
+
+function selectDay(dateStr) {
+  if (isPast(new Date(dateStr + 'T00:00:00'))) return;
+  selectedDate = dateStr;
+  document.querySelectorAll('.week-day').forEach(el => el.classList.toggle('active', el.dataset.date === dateStr));
+  showSlots(dateStr);
+}
+
+function showSlots(dateStr) {
+  const panel = document.getElementById('slotPanel');
+  const grid = document.getElementById('slotGrid');
+  const loading = document.getElementById('slotLoading');
+  const empty = document.getElementById('slotEmpty');
+  const label = document.getElementById('slotDateLabel');
+
+  const d = new Date(dateStr + 'T12:00:00');
+  label.textContent = `${DAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+  panel.style.display = 'block';
+  grid.style.display = 'none';
+  empty.style.display = 'none';
+  loading.style.display = 'block';
+
+  if (cachedAvailability[dateStr]) {
+    renderSlots(dateStr);
+  } else {
+    fetchAvailability(dateStr).then(() => renderSlots(dateStr));
+  }
+}
+
+function renderSlots(dateStr) {
+  const data = cachedAvailability[dateStr];
+  const grid = document.getElementById('slotGrid');
+  const loading = document.getElementById('slotLoading');
+  const empty = document.getElementById('slotEmpty');
+
+  if (!data || !data.slots) {
+    loading.style.display = 'none';
+    empty.style.display = 'block';
+    empty.textContent = 'Could not load availability.';
+    return;
+  }
+
+  const available = data.slots.filter(s => s.available);
+  if (available.length === 0) {
+    loading.style.display = 'none';
+    empty.style.display = 'block';
+    empty.textContent = 'No available times this day.';
+    return;
+  }
+
+  loading.style.display = 'none';
+  grid.style.display = 'grid';
+  grid.innerHTML = '';
+
+  // Check if a slot is already selected for this date
+  const hiddenTime = document.getElementById('time').value;
+
+  data.slots.forEach(slot => {
+    const el = document.createElement('div');
+    el.className = 'slot-item';
+    if (slot.past) {
+      el.className += ' past';
+      el.textContent = slot.time;
+    } else if (slot.available) {
+      el.className += ' avail';
+      el.textContent = slot.time;
+      if (slot.time === hiddenTime && dateStr === document.getElementById('date').value) {
+        el.classList.add('selected');
+      }
+      el.addEventListener('click', () => selectTimeSlot(dateStr, slot.time));
+    } else {
+      el.className += ' busy-slot';
+      const why = slot.busy_calendars && slot.busy_calendars.length > 0 ? slot.busy_calendars[0] : 'booked';
+      el.textContent = slot.time;
+      el.title = why === 'primary' ? 'MG working' : why === 'family' ? 'Family event' : why;
+    }
+    grid.appendChild(el);
+  });
+}
+
+function selectTimeSlot(dateStr, timeStr) {
+  document.getElementById('date').value = dateStr;
+  document.getElementById('time').value = timeStr;
+  document.getElementById('selectedDateText').textContent = dateStr;
+  document.getElementById('selectedTimeText').textContent = timeStr;
+  document.getElementById('selectedTimeDisplay').style.display = 'flex';
+
+  // Highlight the selected slot
+  document.querySelectorAll('.slot-item.selected').forEach(el => el.classList.remove('selected'));
+  document.querySelectorAll('.slot-item').forEach(el => {
+    if (el.textContent.trim() === timeStr && el.classList.contains('avail')) {
+      el.classList.add('selected');
+    }
+  });
+
+  // Scroll to the booking form
+  document.getElementById('bookingForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+document.getElementById('prevWeek').addEventListener('click', () => {
+  currentWeekStart = addDays(currentWeekStart, -7);
+  renderWeek();
+});
+
+document.getElementById('nextWeek').addEventListener('click', () => {
+  currentWeekStart = addDays(currentWeekStart, 7);
+  renderWeek();
+});
+
+document.getElementById('slotBack').addEventListener('click', () => {
+  document.getElementById('slotPanel').style.display = 'none';
+  selectedDate = null;
+  document.querySelectorAll('.week-day').forEach(el => el.classList.remove('active'));
+});
+
+document.getElementById('clearSelection').addEventListener('click', () => {
+  document.getElementById('date').value = '';
+  document.getElementById('time').value = '';
+  document.getElementById('selectedTimeDisplay').style.display = 'none';
+  document.querySelectorAll('.slot-item.selected').forEach(el => el.classList.remove('selected'));
+});
+
+// Init
+renderWeek();
 </script>
 
 </body>
