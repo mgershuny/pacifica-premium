@@ -180,6 +180,12 @@ Rules:
 16. If they're done or say goodbye, set farewell=true.
 17. If you can't understand them, ask a clarifying question.
 18. Keep your responses BRIEF — this is a phone call, not a chat.
+19. PICKUP ADDRESS HANDLING — When the caller says a generic location instead of a full address:
+   - "home", "my house", "my place", "the house", "my home", "pick me up at home" → say "What's your street address?" (or if you have saved addresses from [STATE], use those)
+   - "work", "my office", "my job", "from work" → say "What's the business address?"
+   - "same as before", "same place", "the usual", "like last time" → if you have saved addresses say "[saved address #1], is that right?"; otherwise say "Can you remind me of the address?"
+   - A specific street address → use it directly
+   - DO NOT just accept "my home", "home", "my place" as the pickup value — it's not a drivable address. Always ask for the full address.
 
 RESPOND WITH VALID JSON ONLY:
 {{
@@ -349,6 +355,14 @@ class BookingSession:
                 f"\n- If caller says 'my office', 'from work' — and you don't know their work address, say: 'I don't have an office address on file. What's the full address?'"
                 f"\n- If caller gives a specific address, use that directly (don't mention saved ones)."
                 f"\n- If caller confirms a saved address, set pickup to that address."
+            )
+        elif not self.data.get("pickup"):
+            # No saved addresses — remind LLM to ask for full address when caller says generic terms
+            state_msg += (
+                f"\n[Pickup address note] Caller has no saved addresses."
+                f"\n- If caller says 'home', 'my house', 'my place', 'pick me up at home' → ask for their street address."
+                f"\n- If caller says 'work', 'my office' → ask for the business address."
+                f"\n- Do NOT accept vague location words as the pickup — always get a real street address."
             )
         
         msgs.append({"role": "user", "content": state_msg})
