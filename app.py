@@ -136,8 +136,6 @@ def availability():
                 busy_periods.append({'start': period['start'], 'end': period['end'], 'calendar': cal_id})
         busy_periods.sort(key=lambda x: x['start'])
 
-        CALENDAR_LABELS = {v: k for k, v in ALL_CALENDARS.items()}
-
         slots = []
         current = time_min
         while current < time_max:
@@ -145,23 +143,21 @@ def availability():
             s_iso, e_iso = current.isoformat(), slot_end.isoformat()
 
             is_busy = False
-            busy_for = set()
             for bp in busy_periods:
                 if s_iso < bp['end'] and e_iso > bp['start']:
                     is_busy = True
-                    busy_for.add(CALENDAR_LABELS.get(bp['calendar'], bp['calendar'][:20]))
+                    break
             time_str = current.strftime('%H:%M')
             is_past = time_str <= now.strftime('%H:%M') and date_str == now.strftime('%Y-%m-%d')
 
             slots.append({
                 'time': time_str,
                 'available': not is_busy and not is_past,
-                'busy_calendars': list(busy_for),
                 'past': is_past,
             })
             current = slot_end
 
-        return jsonify({'date': date_str, 'slots': slots, 'busy_periods': busy_periods})
+        return jsonify({'date': date_str, 'slots': slots})
     except Exception as e:
         print(f"Availability error: {e}")
         import traceback; traceback.print_exc()

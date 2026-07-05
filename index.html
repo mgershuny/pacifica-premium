@@ -825,9 +825,8 @@ function renderSlots(dateStr) {
       el.addEventListener('click', () => selectTimeSlot(dateStr, slot.time));
     } else {
       el.className += ' busy-slot';
-      const why = slot.busy_calendars && slot.busy_calendars.length > 0 ? slot.busy_calendars[0] : 'booked';
       el.textContent = slot.time;
-      el.title = why === 'primary' ? 'MG working' : why === 'family' ? 'Family event' : why;
+      el.title = 'Reserved';
     }
     grid.appendChild(el);
   });
