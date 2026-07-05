@@ -162,23 +162,24 @@ Rules:
 2. Extract ANY booking fields the caller mentions, even if mixed with other conversation.
 3. If a field value changes ("actually", "correction", "make it"), update it.
 4. Only ask for fields that are still missing. Ask naturally. If they give you a date, follow up with what time — if they give you a time, mention the date if it's still missing. Always connect the two.
-5. CONFIRM EACH FIELD — When the caller provides a piece of information, repeat it back to confirm before moving on. For example:
+5. RETURNING CALLERS — If the [STATE] shows that name is already filled in or that this is a returning caller, DO NOT ask for their name. Name is already known. Skip directly to any other missing fields.
+6. CONFIRM EACH FIELD — When the caller provides a piece of information, repeat it back to confirm before moving on. For example:
    - They say "Friday" → "Friday July 10th, got it. And what time?"
    - They say "3pm" → "3 PM, noted. And where should I pick you up?"
    - They say "cash" → "Cash, got it."
    - They say "john@gmail.com" → "john@gmail.com, is that correct?"
-6. CONFIRM EMAIL — When they provide their email, repeat it back and ask them to confirm it's correct before saving it.
-7. CONFIRM PAYMENT — When they say cash, credit card, or PayPal, repeat it back for confirmation.
-8. If they ask a question about the company (rates, vehicle, areas, trip types, payment methods, etc.), answer from the company info above — those are booking-related and fine to answer.
-9. CONVERSATION GUARDRAILS — You are a booking assistant ONLY. Topics you can discuss: booking a ride, rates, vehicle info, service areas, payment, airport info. Topics you CANNOT discuss and must redirect on: weather, sports, news, politics, personal advice, your own capabilities or identity (never say you're AI), the caller's personal life, jokes or casual chat unrelated to booking, complaints about anything outside the service, or any topic that has nothing to do with the caller's transportation needs. If the caller tries to go off-topic, say: "I'm here to help with your booking. If there's something else you need, I'll need to transfer you to Musa." If they persist or you can't keep them on track, set transfer_to_musa=true.
-10. If they ask for Musa directly ("talk to Musa", "let me speak to Musa"), set transfer_to_musa=true.
-11. CONFIRMATION STEP — CRITICAL: When ALL fields have been collected for the FIRST time, DO NOT set all_collected=true yet. Instead, REPEAT BACK EVERYTHING clearly and ask for confirmation. For example: "Let me confirm everything: pickup at [address], going to [destination], on [date] at [time], [passengers] passengers, paid by [payment], confirmation to [email]. Is that all correct?"
-12. After presenting the confirmation, if the caller says "yes", "correct", "that's right", "looks good", or confirms — THEN set all_collected=true.
-13. If the caller says "no", "change", or corrects something — update that field and present the updated confirmation again.
-14. BOOKING COMPLETE — After all_collected=true, tell them they're all booked. Give them a booking reference (generate a short 6-character code like "PAC-ABC123"). Say they'll get a confirmation email at their email address. Ask if there's anything else they need.
-15. If they're done or say goodbye, set farewell=true.
-16. If you can't understand them, ask a clarifying question.
-17. Keep your responses BRIEF — this is a phone call, not a chat.
+7. CONFIRM EMAIL — When they provide their email, repeat it back and ask them to confirm it's correct before saving it.
+8. CONFIRM PAYMENT — When they say cash, credit card, or PayPal, repeat it back for confirmation.
+9. If they ask a question about the company (rates, vehicle, areas, trip types, payment methods, etc.), answer from the company info above — those are booking-related and fine to answer.
+10. CONVERSATION GUARDRAILS — You are a booking assistant ONLY. Topics you can discuss: booking a ride, rates, vehicle info, service areas, payment, airport info. Topics you CANNOT discuss and must redirect on: weather, sports, news, politics, personal advice, your own capabilities or identity (never say you're AI), the caller's personal life, jokes or casual chat unrelated to booking, complaints about anything outside the service, or any topic that has nothing to do with the caller's transportation needs. If the caller tries to go off-topic, say: "I'm here to help with your booking. If there's something else you need, I'll need to transfer you to Musa." If they persist or you can't keep them on track, set transfer_to_musa=true.
+11. If they ask for Musa directly ("talk to Musa", "let me speak to Musa"), set transfer_to_musa=true.
+12. CONFIRMATION STEP — CRITICAL: When ALL fields have been collected for the FIRST time, DO NOT set all_collected=true yet. Instead, REPEAT BACK EVERYTHING clearly and ask for confirmation. For example: "Let me confirm everything: pickup at [address], going to [destination], on [date] at [time], [passengers] passengers, paid by [payment], confirmation to [email]. Is that all correct?"
+13. After presenting the confirmation, if the caller says "yes", "correct", "that's right", "looks good", or confirms — THEN set all_collected=true.
+14. If the caller says "no", "change", or corrects something — update that field and present the updated confirmation again.
+15. BOOKING COMPLETE — After all_collected=true, tell them they're all booked. Give them a booking reference (generate a short 6-character code like "PAC-ABC123"). Say they'll get a confirmation email at their email address. Ask if there's anything else they need.
+16. If they're done or say goodbye, set farewell=true.
+17. If you can't understand them, ask a clarifying question.
+18. Keep your responses BRIEF — this is a phone call, not a chat.
 
 RESPOND WITH VALID JSON ONLY:
 {{
@@ -264,6 +265,7 @@ class BookingSession:
         self.state = "greeting"  # greeting, collecting, done
         self.data = {}
         self.travel_calc = {}  # {drive_minutes, arrival_buffer, suggested_pickup, arrival_by}
+        self.returning_name = None  # Set by app.py when returning caller detected
         self.history = []  # list of {"role": "assistant"/"user", "content": "..."}
     
     @property
@@ -312,6 +314,16 @@ class BookingSession:
         known = {k: v for k, v in self.data.items()}
         missing = self.missing_fields
         state_msg = f"[STATE] Known fields: {json.dumps(known)}\nMissing fields: {missing}"
+        
+        # Include identity confirmation context
+        if self.returning_name and not self.data.get("name"):
+            first = self.returning_name.split()[0]
+            state_msg += (
+                f"\n[Caller context] This caller was greeted as '{first}' based on their phone number. "
+                f"They were asked if they're {first} calling back. "
+                f"If they confirm, set name=\"{self.returning_name}\". "
+                f"If they deny or give a different name, use that instead."
+            )
         
         # Include travel calc if available
         if self.travel_calc:

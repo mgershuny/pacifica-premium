@@ -479,9 +479,11 @@ def voice_incoming():
         # Welcome-back: look up caller's phone in past bookings
         caller_name = get_caller_name(caller) if caller else None
         if caller_name:
+            first = caller_name.split()[0]  # First name only
+            session.returning_name = caller_name  # Store full name
             greeting = (
-                f"Hello again, {caller_name}! You've reached Pacifica Premium. "
-                f"Would you like to book another ride today?"
+                f"Hello, {first}. Is this {first} calling back? "
+                f"Would you like to book a ride?"
             )
         else:
             greeting = (
@@ -515,6 +517,28 @@ def voice_response():
             gather = _make_gather("I didn't catch that. Could you repeat it?")
             resp.append(gather)
             return Response(str(resp), mimetype='text/xml')
+
+        # ─── Identity confirmation for returning callers ───
+        if session.returning_name and not session.data.get("name"):
+            text = speech.lower().strip()
+            # Positive responses confirm identity
+            confirm_words = ["yes", "yeah", "yep", "correct", "right", "it's me",
+                             "that's me", "it is", "that is", "sure", "uh huh", "hi",
+                             "hello", "hey", "hey musa", "hi musa", "hello musa"]
+            negative_words = ["no", "nope", "nah", "not me", "different", "wrong",
+                              "this is", "my name is", "i'm", "i am"]
+            
+            if any(w == text or text.startswith(w) or text.endswith(w) for w in negative_words):
+                # Different person - clear and proceed fresh
+                session.returning_name = None
+            elif any(w in text for w in confirm_words):
+                # Confirmed - pre-fill name
+                session.data["name"] = session.returning_name
+                session.returning_name = None
+            else:
+                # Ambiguous - let the LLM handle it naturally
+                # The [STATE] will still show returning_name is pending
+                pass
 
         # LLM handles everything — booking in any order, FAQ, transfers, goodbye
         result = handle_conversation(session, speech)
