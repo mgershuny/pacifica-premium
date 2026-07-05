@@ -1,12 +1,15 @@
 import os, json, uuid, hmac, hashlib, base64, smtplib, email, threading, re
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 load_dotenv()
 from flask import Flask, request, jsonify, send_from_directory, redirect, url_for, Response
 import stripe
+import requests
 from twilio.twiml.voice_response import VoiceResponse, Gather
+from twilio.rest import Client
 from voice_agent import (
-    get_or_create_session, handle_conversation, synthesize_speech
+    get_or_create_session, handle_conversation, synthesize_speech,
+    get_caller_name
 )
 
 app = Flask(__name__, static_folder='.', static_url_path='')
@@ -19,6 +22,24 @@ CALENDAR_ID = os.getenv('PACIFICA_CALENDAR_ID')
 TWILIO_PHONE = os.getenv('TWILIO_PHONE', '+143****8523')
 MG_PHONE = os.getenv('MG_PHONE', '')
 
+# ─── Twilio client for SMS ───
+TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID', '')
+TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN', '')
+twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN) if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN else None
+
+def send_sms(to, message):
+    """Send SMS via Twilio. Returns True on success."""
+    if not twilio_client or not TWILIO_PHONE:
+        print(f"[SMS] Would send to {to}: {message}")
+        return False
+    try:
+        twilio_client.messages.create(to=to, from_=TWILIO_PHONE, body=message)
+        print(f"[SMS] Sent to {to}")
+        return True
+    except Exception as e:
+        print(f"[SMS] Error to {to}: {e}")
+        return False
+
 BOOKINGS_FILE = os.path.join(os.path.dirname(__file__), 'bookings.json')
 TOKEN_FILE = os.path.join(os.path.dirname(__file__), 'mg_token.txt')
 CONFIRM_TOKEN = os.getenv('MG_CONFIRM_TOKEN') or 'pacifica-confirm-2026'
@@ -29,6 +50,18 @@ def load_bookings():
         with open(BOOKINGS_FILE) as f:
             return json.load(f)
     return []
+
+def check_double_booking(date, time, exclude_id=None):
+    """Check if a slot already has a confirmed booking. Returns conflicting booking or None."""
+    bookings = load_bookings()
+    for b in bookings:
+        if b.get('status') not in ('confirmed', 'paid', 'pending'):
+            continue
+        if exclude_id and b.get('id') == exclude_id:
+            continue
+        if b.get('date') == date and b.get('time') == time:
+            return b
+    return None
 
 def save_booking(booking):
     bookings = load_bookings()
@@ -300,16 +333,6 @@ def book():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/booking/success')
-def booking_success():
-    booking_id = request.args.get('booking_id')
-    session_id = request.args.get('session_id')
-    if booking_id:
-        update_booking(booking_id, {'paid': True, 'status': 'paid'})
-        booking = get_booking(booking_id)
-        if booking:
-            _notify_mg(booking)
-    return redirect(f"/?booking={booking_id}&status=paid")
 
 @app.route('/api/stripe/webhook', methods=['POST'])
 def stripe_webhook():
@@ -345,6 +368,15 @@ def confirm_booking(token):
 
     cal_link = create_calendar_event(booking)
     update_booking(booking_id, {'status': 'confirmed', 'cal_link': cal_link})
+
+    # SMS confirmation to caller when MG confirms
+    phone = booking.get('phone', '')
+    if phone:
+        send_sms(phone,
+            f"Your Pacifica Premium ride is confirmed! Ref: {booking_id}. "
+            f"{booking['date']} at {booking['time']}. "
+            f"{booking['pickup']} \u2192 {booking['dropoff']}. "
+            f"See you then!")
 
     pmt = booking.get('payment_method', '')
     pmt_info = '✅ Paid' if booking.get('paid') else ('💵 Cash (collect at ride)' if pmt == 'cash' else '⏳')
@@ -437,18 +469,27 @@ def _make_gather(text):
 
 @app.route('/voice/incoming', methods=['GET', 'POST'])
 def voice_incoming():
-    """Entry point for incoming calls."""
+    """Entry point for incoming calls. Checks for returning callers by phone number."""
     try:
         call_sid = request.values.get('CallSid', 'unknown')
+        caller = request.values.get('From', '')
         session = get_or_create_session(call_sid)
         session.state = "greeting"
 
+        # Welcome-back: look up caller's phone in past bookings
+        caller_name = get_caller_name(caller) if caller else None
+        if caller_name:
+            greeting = (
+                f"Hello again, {caller_name}! You've reached Pacifica Premium. "
+                f"Would you like to book another ride today?"
+            )
+        else:
+            greeting = (
+                "Hello! You've reached Pacifica Premium. This is your chauffeur service for "
+                "the Toronto area. I can help you book a ride or answer questions about our service. "
+                "How can I help today?"
+            )
         resp = VoiceResponse()
-        greeting = (
-            "Hello! You've reached Pacifica Premium. This is your chauffeur service for "
-            "the Toronto area. I can help you book a ride or answer questions about our service. "
-            "How can I help you today?"
-        )
         gather = _make_gather(greeting)
         resp.append(gather)
         return Response(str(resp), mimetype='text/xml')
@@ -498,7 +539,27 @@ def voice_response():
 
         if result.get("is_complete"):
             booking_data = result["booking_data"]
+            # Check double-booking before saving
+            conflict = check_double_booking(booking_data['date'], booking_data['time'])
+            if conflict:
+                msg = f"I'm sorry, it looks like {booking_data['date']} at {booking_data['time']} is already booked. Could you try a different time?"
+                gather = _make_gather(msg)
+                resp.append(gather)
+                return Response(str(resp), mimetype='text/xml')
             booking = save_booking(booking_data)
+            # Send SMS confirmation to caller
+            caller_phone = booking_data.get('phone', '')
+            if caller_phone:
+                sms_msg = (
+                    f"Pacifica Premium Confirmed! "
+                    f"Ref: {booking['id']}. "
+                    f"{booking_data['date']} at {booking_data['time']}. "
+                    f"{booking_data['pickup']} \u2192 {booking_data['dropoff']}. "
+                    f"{booking_data.get('passengers','1')} pax. "
+                    f"Paid by {booking_data.get('payment_method','card')}. "
+                    f"Confirmation sent to {booking_data.get('email','')}."
+                )
+                send_sms(caller_phone, sms_msg)
             _notify_mg(booking)
             session.state = "done"
             msg = (
@@ -560,6 +621,100 @@ def voice_end():
 
 
 # ─── Start ───
+
+# ─── Reminder Check Endpoint ───
+REMINDER_FILE = os.path.join(os.path.dirname(__file__), 'reminders_sent.json')
+
+def _load_reminders():
+    if os.path.exists(REMINDER_FILE):
+        with open(REMINDER_FILE) as f:
+            return json.load(f)
+    return []
+
+def _save_reminder(booking_id):
+    reminders = _load_reminders()
+    reminders.append(booking_id)
+    with open(REMINDER_FILE, 'w') as f:
+        json.dump(reminders, f)
+
+@app.route('/api/reminders/check')
+def reminders_check():
+    """Check bookings for 24h-out reminders and send SMS. Railway cron hits this."""
+    pw = request.args.get('pw', '')
+    if pw != CONFIRM_TOKEN[:8]:
+        return jsonify({'error': 'unauthorized'}), 403
+
+    now = datetime.utcnow()
+    reminders_sent = _load_reminders()
+    sent = 0
+
+    bookings = load_bookings()
+    for b in bookings:
+        bid = b.get('id', '')
+        if bid in reminders_sent:
+            continue
+        if b.get('status') not in ('confirmed', 'paid'):
+            continue
+
+        # Parse booking date+time
+        try:
+            bdate = b.get('date', '')
+            btime = b.get('time', '')
+            # Handle various date formats
+            bdt = None
+            for fmt in ['%B %d, %Y %I:%M', '%Y-%m-%d %H:%M', '%B %d %Y %I:%M %p', '%b %d, %Y %I:%M %p']:
+                try:
+                    bdt = datetime.strptime(f"{bdate} {btime}", fmt)
+                    break
+                except:
+                    continue
+            if bdt is None:
+                continue
+            # Make timezone-aware (EDT)
+            from datetime import timezone, timedelta as tdelta
+            edt = timezone(tdelta(hours=-4))
+            bdt = bdt.replace(tzinfo=edt)
+            now_local = datetime.now(edt)
+            diff = (bdt - now_local).total_seconds()
+            # Send reminder if 12-24 hours before
+            if 43200 <= diff <= 86400:
+                phone = b.get('phone', '')
+                if phone:
+                    msg = (
+                        f"Reminder: Your Pacifica Premium ride is tomorrow! "
+                        f"Ref: {bid}. "
+                        f"{bdate} at {btime}. "
+                        f"{b.get('pickup','')} \u2192 {b.get('dropoff','')}. "
+                        f"Reply or call if anything changes."
+                    )
+                    send_sms(phone, msg)
+                    _save_reminder(bid)
+                    sent += 1
+        except:
+            pass
+
+    return jsonify({'reminders_sent': sent, 'total_checked': len(bookings)})
+
+
+# ─── SMS confirmation for web bookings ───
+@app.route('/api/booking/success')
+def booking_success():
+    booking_id = request.args.get('booking_id')
+    session_id = request.args.get('session_id')
+    if booking_id:
+        update_booking(booking_id, {'paid': True, 'status': 'paid'})
+        booking = get_booking(booking_id)
+        if booking:
+            phone = booking.get('phone', '')
+            if phone:
+                send_sms(phone,
+                    f"Pacifica Premium Paid! Ref: {booking_id}. "
+                    f"{booking.get('date','')} at {booking.get('time','')}. "
+                    f"Payment received. Confirmation to {booking.get('email','')}.")
+            _notify_mg(booking)
+    return redirect(f"/?booking={booking_id}&status=paid")
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     print(f"Pacifica Premium server on :{port}")

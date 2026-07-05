@@ -483,3 +483,29 @@ def get_or_create_session(call_sid):
     if call_sid not in BOOKING_SESSIONS:
         BOOKING_SESSIONS[call_sid] = BookingSession(call_sid)
     return BOOKING_SESSIONS[call_sid]
+
+
+def get_caller_name(phone):
+    """Look up a caller's phone number in past bookings to greet them by name."""
+    import json, os
+    bookings_file = os.path.join(os.path.dirname(__file__), 'bookings.json')
+    if not os.path.exists(bookings_file):
+        return None
+    # Normalize phone: strip +1, spaces, dashes, parens
+    norm = phone.replace('+1', '').replace('+', '').replace(' ', '').replace('-', '').replace('(', '').replace(')', '')
+    try:
+        with open(bookings_file) as f:
+            bookings = json.load(f)
+        names_seen = {}
+        for b in bookings:
+            bp = (b.get('phone', '') or '').replace('+1', '').replace('+', '').replace(' ', '').replace('-', '').replace('(', '').replace(')', '')
+            if norm in bp or bp in norm or (len(norm) > 6 and len(bp) > 6 and norm[-6:] == bp[-6:]):
+                name = b.get('name', '').strip()
+                if name and len(name) > 1:
+                    names_seen[name] = names_seen.get(name, 0) + 1
+        if names_seen:
+            # Return the most common name associated with this number
+            return max(names_seen, key=names_seen.get)
+    except:
+        pass
+    return None
