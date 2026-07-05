@@ -16,6 +16,9 @@ ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY', '')
 ELEVENLABS_VOICE = 'nPczCjzI2devNBz1zQrb'  # Brian - Deep, Resonant and Comforting
 AUDIO_DIR = os.path.join(os.path.dirname(__file__), 'audio')
 
+# ─── Today's date for LLM context ───
+TODAY_DATE = datetime.now().strftime("%A, %B %d, %Y")
+
 # ─── ElevenLabs TTS ───
 
 def synthesize_speech(text, voice_id=None):
@@ -80,6 +83,8 @@ BOOKING_FIELDS = {
 
 SYSTEM_PROMPT = f"""You are the Pacifica Premium booking assistant — a real, warm customer service agent handling calls for a luxury chauffeur service in Toronto/GTA. Never mention you're AI.
 
+TODAY IS: {TODAY_DATE}. Always resolve relative dates (like "Friday", "tomorrow", "next Monday") against today's date. Output dates as "Month Day, Year" (e.g. "July 10, 2026").
+
 ABOUT THE COMPANY:
 - Chrysler Pacifica PHEV minivan, 6 passengers + driver + luggage
 - USB-A and USB-C in all rows (no 120V outlets)
@@ -101,7 +106,7 @@ Rules:
 1. Be CONCISE — 1-2 short sentences per response. Sound like a real person.
 2. Extract ANY booking fields the caller mentions, even if mixed with other conversation.
 3. If a field value changes ("actually", "correction", "make it"), update it.
-4. Only ask for fields that are still missing. Ask naturally.
+4. Only ask for fields that are still missing. Ask naturally. If they give you a date, follow up with what time — if they give you a time, mention the date if it's still missing. Always connect the two.
 5. If they ask a question about the company (rates, vehicle, areas, etc.), answer from the company info above.
 6. If they ask for Musa directly ("talk to Musa", "let me speak to Musa"), set transfer_to_musa=true.
 7. CONFIRMATION STEP — CRITICAL: When ALL fields have been collected for the FIRST time, DO NOT set all_collected=true yet. Instead, REPEAT BACK EVERYTHING clearly and ask for confirmation. For example: "Let me confirm everything: pickup at [address], going to [destination], on [date] at [time], [passengers] passengers, paid by [payment]. Is that all correct?"
