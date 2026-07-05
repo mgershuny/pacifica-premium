@@ -459,10 +459,12 @@ def _play_or_say(text, gather=None):
             gather.say(text, voice='Polly.Matthew', language='en-US')
         return None
 
-def _make_gather(text):
-    """Create a Gather with Brian voice (or Polly fallback)."""
-    gather = Gather(input='speech', action='/voice/response', method='POST',
-                    speechTimeout='auto', timeout='5')
+def _make_gather(text, action='/voice/response'):
+    """Create a Gather with Brian voice (or Polly fallback).
+    Uses actionOnEmptyResult so silence always routes to action URL.
+    Adds a fallback Say after the Gather in case Twilio doesn't fire actionOnEmptyResult."""
+    gather = Gather(input='speech', action=action, method='POST',
+                    speechTimeout='auto', timeout='5', actionOnEmptyResult='true')
     _play_or_say(text, gather)
     return gather
 
@@ -516,9 +518,25 @@ def voice_response():
         resp = VoiceResponse()
 
         if not speech.strip():
+            session.silence_count += 1
+            if session.silence_count >= 2:
+                # After 2 silent turns, offer transfer
+                resp.say("Sorry, I'm having trouble hearing you. Let me transfer you to Musa.", voice='Polly.Matthew')
+                if MG_PHONE and MG_PHONE != 'PLACEHOLDER':
+                    resp.dial(MG_PHONE, callerId=TWILIO_PHONE, action='/voice/end')
+                else:
+                    resp.say("Please try again later.", voice='Polly.Matthew')
+                    resp.hangup()
+                return Response(str(resp), mimetype='text/xml')
+            # First silence — re-prompt warmly
             gather = _make_gather("I didn't catch that. Could you repeat it?")
             resp.append(gather)
+            # Fallback in case actionOnEmptyResult doesn't fire on repeat
+            resp.say("Sorry, still didn't hear you. Let me try again.")
             return Response(str(resp), mimetype='text/xml')
+
+        # Reset silence counter on valid input
+        session.silence_count = 0
 
         # ─── Identity confirmation for returning callers ───
         if session.returning_name and not session.data.get("name"):
@@ -640,11 +658,17 @@ def voice_response():
             resp.hangup()
             return Response(str(resp), mimetype='text/xml')
 
-        # Normal conversation turn
-        say = result.get("say", "")
+        # Normal conversation turn — never say nothing
+        say = result.get("say", "").strip()
+        if not say:
+            missing = session.missing_fields
+            if missing:
+                say = "Go ahead, I'm listening."
+            else:
+                say = "Is there anything else I can help you with?"
         audio_url = _play_or_say(say)
         gather = Gather(input='speech', action='/voice/response', method='POST',
-                        speechTimeout='auto', timeout='5')
+                        speechTimeout='auto', timeout='5', actionOnEmptyResult='true')
         if audio_url:
             gather.play(audio_url)
         else:

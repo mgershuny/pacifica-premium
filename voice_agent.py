@@ -267,6 +267,7 @@ class BookingSession:
         self.travel_calc = {}  # {drive_minutes, arrival_buffer, suggested_pickup, arrival_by}
         self.returning_name = None  # Set by app.py when returning caller detected
         self.saved_addresses = []  # Past pickup addresses for returning callers
+        self.silence_count = 0  # Consecutive silent/empty responses
         self.history = []  # list of {"role": "assistant"/"user", "content": "..."}
     
     @property
