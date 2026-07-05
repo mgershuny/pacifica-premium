@@ -399,10 +399,15 @@ def voice_response():
                 resp.say("One moment please, I'll transfer you to Musa.", voice='Polly.Matthew')
                 resp.dial(MG_PHONE, callerId=TWILIO_PHONE, action='/voice/end')
             else:
-                gather = _make_gather(
-                    "I'm sorry, Musa isn't available to take calls right now. "
-                    "I can help you with a booking or answer questions. How can I help?"
-                )
+                # Continue the conversation instead of restarting
+                say = "I'm sorry, Musa isn't available to take calls right now, but I can definitely help you with a booking or answer any questions. What can I do for you?"
+                audio_url = _play_or_say(say)
+                gather = Gather(input='speech', action='/voice/response', method='POST',
+                                speechTimeout='auto', timeout='5')
+                if audio_url:
+                    gather.play(audio_url)
+                else:
+                    gather.say(say, voice='Polly.Matthew')
                 resp.append(gather)
             return Response(str(resp), mimetype='text/xml')
 
@@ -412,9 +417,13 @@ def voice_response():
             _notify_mg(booking)
             session.state = "done"
             msg = (
-                f"Perfect! I've submitted your booking for {booking_data['date']} "
-                f"at {booking_data['time']}. Musa will review and confirm shortly. "
-                f"Your booking reference is {booking['id']}. "
+                f"Perfect, your booking is confirmed! Let me recap: "
+                f"pickup at {booking_data['pickup']} going to {booking_data['dropoff']}, "
+                f"on {booking_data['date']} at {booking_data['time']}, "
+                f"for {booking_data['passengers']} passengers, "
+                f"paid by {booking_data.get('payment_method', 'card')}. "
+                f"Your reference is {booking['id']}. "
+                f"Musa will review this shortly. "
                 f"If you need anything else, just ask. Otherwise, have a great day!"
             )
             gather = _make_gather(msg)
