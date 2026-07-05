@@ -81,7 +81,6 @@ ALL_CALENDARS = {
     "primary": "mgershuny@gmail.com",
     "family": "family00535914979446525255@group.calendar.google.com",
     "pacifica": os.getenv('PACIFICA_CALENDAR_ID', ''),
-    "celine": "oat9mdj24ateup8s3gqbsn01cs@group.calendar.google.com",
     "holidays": "en.canadian#holiday@group.v.calendar.google.com",
 }
 
