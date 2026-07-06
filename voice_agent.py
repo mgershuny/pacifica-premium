@@ -1,7 +1,7 @@
 """
 Pacifica Premium — AI Voice Agent
 LLM-powered natural conversation for booking, FAQ, and transfers.
-Uses DeepSeek API for intelligent extraction and response generation.
+Uses DeepSeek API with function calling for intelligent data retrieval + response generation.
 """
 
 import os, json, re, uuid, hashlib, urllib.request, urllib.error
@@ -103,6 +103,220 @@ def synthesize_speech(text, voice_id=None):
         print(f"ElevenLabs TTS error: {e}")
         return None
 
+# ─── Tool Definitions ───
+
+TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "resolve_location",
+            "description": "Resolve a vague location ('home', 'my house', 'my place', 'the office', 'downtown') to a real street address. Looks up saved addresses for returning callers. Returns the resolved address or 'needs_address' if unclear.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "description": {
+                        "type": "string",
+                        "description": "What the caller said about the location (e.g. 'my home', '123 Main St', 'the airport', 'work')"
+                    },
+                    "caller_phone": {
+                        "type": "string",
+                        "description": "The caller's phone number to check for saved addresses. Pass empty string if unknown."
+                    }
+                },
+                "required": ["description"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calculate_price",
+            "description": "Calculate the estimated price for a ride based on pickup and dropoff locations. Handles flat airport rates, distance-based pricing, and event rates.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pickup": {
+                        "type": "string",
+                        "description": "Pickup address or location name"
+                    },
+                    "dropoff": {
+                        "type": "string",
+                        "description": "Dropoff address or destination"
+                    },
+                    "trip_type": {
+                        "type": "string",
+                        "enum": ["airport", "long_distance", "event", "unknown"],
+                        "description": "Type of trip. 'airport' = YYZ/YTZ flat rates, 'long_distance' = $75+, 'event' = $55 flat"
+                    }
+                },
+                "required": ["pickup", "dropoff"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "lookup_caller",
+            "description": "Look up a caller by phone number. Returns their name and past addresses from previous bookings. Use this to personalize greetings and recognize returning customers.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "phone": {
+                        "type": "string",
+                        "description": "Caller's phone number"
+                    }
+                },
+                "required": ["phone"]
+            }
+        }
+    }
+]
+
+# ─── Tool Implementations ───
+
+def _resolve_location(description, caller_phone=""):
+    """Resolve a vague location description to a real address."""
+    desc_lower = description.lower().strip()
+    
+    # Check if it's already an address-like string (contains numbers, street types, etc.)
+    has_address_pattern = bool(re.search(r'\d+\s+\w+\s+(street|st|avenue|ave|road|rd|drive|dr|blvd|boulevard|crescent|cres|way|lane|ln|circle|cres|court|crt|gate|terrace|terr)', desc_lower))
+    
+    if has_address_pattern:
+        return {
+            "resolved": description,
+            "source": "provided",
+            "needs_confirmation": True,
+            "needs_full_address": False
+        }
+    
+    # Check saved addresses for returning callers
+    if caller_phone and any(w in desc_lower for w in ["home", "house", "place", "my place", "same"]):
+        saved = get_caller_addresses(caller_phone)
+        if saved:
+            return {
+                "resolved": saved[0],
+                "source": "saved",
+                "needs_confirmation": True,
+                "needs_full_address": False,
+                "alternatives": saved[1:] if len(saved) > 1 else []
+            }
+    
+    # Generic location words — needs full address
+    vague_words = ["home", "my house", "my place", "the house", "house", "work", "office", "my office", "downtown", "uptown", "my work", "the office", "the shop", "my shop"]
+    if any(w == desc_lower or desc_lower.startswith(w) or desc_lower.endswith(w) for w in vague_words):
+        return {
+            "resolved": None,
+            "source": "vague",
+            "needs_full_address": True,
+            "hint": f"Caller said '{description}'. Ask for their street address."
+        }
+    
+    # Airport/common destinations
+    airport_names = ["yyz", "pearson", "toronto pearson", "ytz", "billy bishop", "toronto airport", "airport"]
+    if any(a in desc_lower for a in airport_names):
+        return {
+            "resolved": "Toronto Pearson International Airport (YYZ)" if any(a in desc_lower for a in ["yyz", "pearson"]) else "Billy Bishop Toronto City Airport (YTZ)",
+            "source": "airport",
+            "needs_confirmation": True,
+            "needs_full_address": False
+        }
+    
+    # It's a specific-sounding location but not a full address
+    return {
+        "resolved": description,
+        "source": "provided",
+        "needs_confirmation": True,
+        "needs_full_address": False
+    }
+
+
+def _calculate_price(pickup, dropoff, trip_type="unknown"):
+    """Calculate estimated price for a ride."""
+    p_lower = (pickup + " " + dropoff).lower()
+    
+    # Airport flat rates
+    to_yyz = any(w in p_lower for w in ["yyz", "pearson"])
+    to_ytz = any(w in p_lower for w in ["ytz", "billy bishop"])
+    
+    if to_yyz:
+        return {
+            "price": 45,
+            "currency": "CAD",
+            "type": "Airport Transfer - YYZ",
+            "note": "$45 flat rate to/from Toronto Pearson"
+        }
+    if to_ytz:
+        return {
+            "price": 40,
+            "currency": "CAD",
+            "type": "Airport Transfer - YTZ",
+            "note": "$40 flat rate to/from Billy Bishop"
+        }
+    
+    if trip_type == "event":
+        return {
+            "price": 55,
+            "currency": "CAD",
+            "type": "Event / Night Out",
+            "note": "$55 flat rate for events and nights out in the GTA"
+        }
+    
+    if trip_type == "long_distance":
+        return {
+            "price": 75,
+            "currency": "CAD",
+            "type": "Long Distance",
+            "note": "Starting from $75 for long distance trips, varies by distance"
+        }
+    
+    return {
+        "price": None,
+        "currency": "CAD",
+        "type": "unknown",
+        "note": "Airport rates: $45 YYZ, $40 YTZ. Long distance from $75. Events $55. All CAD.",
+        "needs_clarification": True
+    }
+
+
+def _lookup_caller(phone):
+    """Look up caller info by phone number."""
+    try:
+        name = get_caller_name(phone)
+        addresses = get_caller_addresses(phone) if name else []
+        return {
+            "name": name,
+            "past_addresses": addresses,
+            "is_returning": name is not None
+        }
+    except Exception as e:
+        print(f"[lookup_caller] Error: {e}")
+        return {"name": None, "past_addresses": [], "is_returning": False}
+
+
+# ─── Tool Dispatcher ───
+
+def execute_tool(name, args):
+    """Execute a tool by name with parsed arguments. Returns dict result."""
+    try:
+        if name == "resolve_location":
+            return _resolve_location(
+                args.get("description", ""),
+                args.get("caller_phone", "")
+            )
+        elif name == "calculate_price":
+            return _calculate_price(
+                args.get("pickup", ""),
+                args.get("dropoff", ""),
+                args.get("trip_type", "unknown")
+            )
+        elif name == "lookup_caller":
+            return _lookup_caller(args.get("phone", ""))
+        else:
+            return {"error": f"Unknown tool: {name}"}
+    except Exception as e:
+        return {"error": f"Tool {name} failed: {str(e)}"}
+
+
 # ─── System Prompt ───
 
 BOOKING_FIELDS = {
@@ -133,6 +347,11 @@ ABOUT THE COMPANY:
 
 BOOKING FIELDS TO COLLECT:
 {json.dumps(BOOKING_FIELDS, indent=2)}
+
+CRITICAL — YOU HAVE TOOLS AVAILABLE. USE THEM.
+- resolve_location: When caller says "home", "my house", "my place", "work", "the office", or any vague location. Call this tool BEFORE accepting it as a pickup address. It will return the real address or tell you to ask for the full address.
+- calculate_price: When caller asks about rates, pricing, or before confirming a booking. Don't guess prices — use the tool.
+- lookup_caller: Use this at the start of the call if you have the caller's phone number. It returns their name and past addresses for a personalized greeting.
 
 YOUR JOB:
 Have a natural, flowing conversation. The caller can give info in ANY order — extract whatever they provide from each sentence. For example:
@@ -181,11 +400,10 @@ Rules:
 17. If you can't understand them, ask a clarifying question.
 18. Keep your responses BRIEF — this is a phone call, not a chat.
 19. PICKUP ADDRESS HANDLING — When the caller says a generic location instead of a full address:
-   - "home", "my house", "my place", "the house", "my home", "pick me up at home" → say "What's your street address?" (or if you have saved addresses from [STATE], use those)
-   - "work", "my office", "my job", "from work" → say "What's the business address?"
-   - "same as before", "same place", "the usual", "like last time" → if you have saved addresses say "[saved address #1], is that right?"; otherwise say "Can you remind me of the address?"
-   - A specific street address → use it directly
-   - DO NOT just accept "my home", "home", "my place" as the pickup value — it's not a drivable address. Always ask for the full address.
+    - "home", "my house", "my place", "the house", "my home", "pick me up at home" → use resolve_location tool to get their saved address or ask for street address
+    - "work", "my office", "my job", "from work" → use resolve_location tool
+    - "same as before", "same place", "the usual", "like last time" → use resolve_location tool
+    - DO NOT just accept "my home", "home", "my place" as the pickup value — it's not a drivable address. Always use resolve_location to get or ask for the real address.
 
 RESPOND WITH VALID JSON ONLY:
 {{
@@ -218,10 +436,121 @@ IMPORTANT RULES:
 """
 
 
-# ─── LLM API Call ───
+# ─── LLM API Call with Tool Support ───
+
+def _raw_llm_call(messages, tools=None, retries=2):
+    """Raw DeepSeek API call. Returns the full response dict or None."""
+    if not DEEPSEEK_API_KEY:
+        return None
+
+    payload_dict = {
+        "model": DEEPSEEK_MODEL,
+        "messages": messages,
+        "temperature": 0.3,
+        "max_tokens": 500,
+    }
+    if tools:
+        payload_dict["tools"] = tools
+
+    payload = json.dumps(payload_dict).encode('utf-8')
+
+    req = urllib.request.Request(
+        DEEPSEEK_URL,
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+        },
+        method="POST"
+    )
+
+    for attempt in range(retries):
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                return json.loads(resp.read().decode('utf-8'))
+        except (urllib.error.URLError, json.JSONDecodeError, KeyError) as e:
+            if attempt < retries - 1:
+                continue
+            return None
+    return None
+
+
+def call_llm_with_tools(messages, max_tool_rounds=6):
+    """Call LLM with tool support. Keeps calling tools until LLM returns text JSON.
+    
+    Each round: LLM responds → if tool_calls → execute → append result → repeat
+    When LLM returns text → extract JSON and return it.
+    
+    Returns: parsed JSON dict with say/extracted etc., or None on failure.
+    """
+    # Start with system prompt + history + state
+    working_messages = list(messages)
+    
+    for round_num in range(max_tool_rounds):
+        response = _raw_llm_call(working_messages, tools=TOOLS)
+        if not response:
+            return None
+        
+        try:
+            message = response['choices'][0]['message']
+        except (KeyError, IndexError):
+            return None
+        
+        # Check if LLM wants to call tools
+        tool_calls = message.get('tool_calls')
+        if tool_calls:
+            # Add assistant message with tool calls to history
+            assistant_msg = {
+                "role": "assistant",
+                "content": message.get('content') or None
+            }
+            # Add any content it said before calling the tool
+            if message.get('content'):
+                assistant_msg["content"] = message['content']
+            assistant_msg["tool_calls"] = tool_calls
+            working_messages.append(assistant_msg)
+            
+            # Execute each tool and append results
+            for tc in tool_calls:
+                func_name = tc['function']['name']
+                try:
+                    func_args = json.loads(tc['function']['arguments'])
+                except json.JSONDecodeError:
+                    func_args = {}
+                
+                result = execute_tool(func_name, func_args)
+                working_messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc['id'],
+                    "content": json.dumps(result)
+                })
+            
+            # Trim working_messages if too long (keep system + last 30)
+            while len(working_messages) > 30:
+                # Remove oldest non-system messages
+                for i, msg in enumerate(working_messages):
+                    if msg['role'] != 'system' and msg['role'] != 'tool':
+                        working_messages.pop(i)
+                        break
+            
+            continue  # Go again with tool results fed back
+        
+        # No tool calls — extract JSON content
+        content = message.get('content', '')
+        if not content:
+            return None
+        
+        # Extract JSON from response (handle markdown-wrapped JSON)
+        json_match = re.search(r'\{.*\}', content, re.DOTALL)
+        if json_match:
+            return json.loads(json_match.group())
+        return json.loads(content)
+    
+    return None  # Hit max tool rounds
+
 
 def call_llm(messages, retries=2):
-    """Call DeepSeek API with message history. Returns parsed JSON or None."""
+    """Legacy: Call DeepSeek API without tools. Returns parsed JSON or None."""
     if not DEEPSEEK_API_KEY:
         return None
 
@@ -321,7 +650,7 @@ class BookingSession:
         # Add current known state as a user message
         known = {k: v for k, v in self.data.items()}
         missing = self.missing_fields
-        state_msg = f"[STATE] Known fields: {json.dumps(known)}\nMissing fields: {missing}"
+        state_msg = f"[STATE] Known fields: {json.dumps(known)}\nMissing fields: {missing}\nCaller phone: {self.data.get('phone', 'unknown')}"
         
         # Include identity confirmation context
         if self.returning_name and not self.data.get("name"):
@@ -349,20 +678,7 @@ class BookingSession:
             state_msg += (
                 f"\n[Caller's saved addresses from past bookings]"
                 f"\n{addr_list}"
-                f"\nRULES FOR PICKUP ADDRESS:"
-                f"\n- If caller says 'from home', 'my house', 'my place', 'pick me up at home' — say: 'I have your address as [saved address #1]. Is that correct?'"
-                f"\n- If caller says 'same as before', 'same place', 'like last time', 'the usual' — say: 'That would be [saved address #1]. Is that right?'"
-                f"\n- If caller says 'my office', 'from work' — and you don't know their work address, say: 'I don't have an office address on file. What's the full address?'"
-                f"\n- If caller gives a specific address, use that directly (don't mention saved ones)."
-                f"\n- If caller confirms a saved address, set pickup to that address."
-            )
-        elif not self.data.get("pickup"):
-            # No saved addresses — remind LLM to ask for full address when caller says generic terms
-            state_msg += (
-                f"\n[Pickup address note] Caller has no saved addresses."
-                f"\n- If caller says 'home', 'my house', 'my place', 'pick me up at home' → ask for their street address."
-                f"\n- If caller says 'work', 'my office' → ask for the business address."
-                f"\n- Do NOT accept vague location words as the pickup — always get a real street address."
+                f"\nCall resolve_location to confirm which address they want."
             )
         
         msgs.append({"role": "user", "content": state_msg})
@@ -386,9 +702,9 @@ def handle_conversation(session, user_speech):
     while len(session.history) > 40:
         session.history.pop(0)
     
-    # Call LLM
+    # Call LLM with tool support
     messages = session.build_messages()
-    result = call_llm(messages)
+    result = call_llm_with_tools(messages)
     
     # Fallback if LLM fails
     if not result:
