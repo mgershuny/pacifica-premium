@@ -680,6 +680,15 @@ def voice_response():
         print(f"Error in /voice/response: {e}")
         import traceback
         traceback.print_exc()
+        # Try to log what the session looks like
+        try:
+            call_sid = request.values.get('CallSid', 'unknown')
+            speech = request.values.get('SpeechResult', '')
+            session = get_or_create_session(call_sid)
+            print(f"[voice_response exception] CallSid={call_sid} speech='{speech}' "
+                  f"session.data={session.data} session.history_len={len(session.history)}")
+        except:
+            pass
         resp = VoiceResponse()
         resp.say("Sorry about that! Let me connect you with Musa.")
         if MG_PHONE and MG_PHONE != 'PLACEHOLDER':
