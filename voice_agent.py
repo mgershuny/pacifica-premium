@@ -452,7 +452,8 @@ def _raw_llm_call(messages, tools=None, retries=2):
     if tools:
         payload_dict["tools"] = tools
 
-    payload = json.dumps(payload_dict).encode('utf-8')
+    payload_str = json.dumps(payload_dict)
+    payload = payload_str.encode('utf-8')
 
     req = urllib.request.Request(
         DEEPSEEK_URL,
@@ -467,8 +468,19 @@ def _raw_llm_call(messages, tools=None, retries=2):
     for attempt in range(retries):
         try:
             with urllib.request.urlopen(req, timeout=20) as resp:
-                return json.loads(resp.read().decode('utf-8'))
+                body = resp.read().decode('utf-8')
+                if not body or not body.strip():
+                    print(f"[_raw_llm_call] Empty response body (attempt {attempt+1})")
+                    continue
+                return json.loads(body)
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode('utf-8', errors='replace')
+            print(f"[_raw_llm_call] HTTP {e.code}: {err_body[:500]}")
+            if attempt < retries - 1:
+                continue
+            return None
         except (urllib.error.URLError, json.JSONDecodeError, KeyError) as e:
+            print(f"[_raw_llm_call] Error (attempt {attempt+1}): {e}")
             if attempt < retries - 1:
                 continue
             return None
@@ -538,13 +550,19 @@ def call_llm_with_tools(messages, max_tool_rounds=6):
         # No tool calls — extract JSON content
         content = message.get('content', '')
         if not content:
+            print(f"[call_llm] Empty content (round {round_num+1})")
             return None
         
         # Extract JSON from response (handle markdown-wrapped JSON)
-        json_match = re.search(r'\{.*\}', content, re.DOTALL)
-        if json_match:
-            return json.loads(json_match.group())
-        return json.loads(content)
+        try:
+            json_match = re.search(r'\{.*\}', content, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group())
+            return json.loads(content)
+        except (json.JSONDecodeError, ValueError) as e:
+            print(f"[call_llm] JSON parse error (round {round_num+1}): {e}")
+            print(f"[call_llm] Raw content: {content[:500]}")
+            return None
     
     return None  # Hit max tool rounds
 
