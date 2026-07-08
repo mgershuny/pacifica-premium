@@ -704,6 +704,24 @@ class BookingSession:
         return msgs
 
 
+# ─── Vague Location Detection ───
+
+VAGUE_WORDS = [
+    "home", "my home", "my house", "my place", "the house",
+    "at home", "from home", "my work", "work", "my office",
+    "the office", "my crib", "my spot", "my apartment",
+    "my condo", "my residence", "my address", "from work",
+]
+
+def _is_vague_location(text):
+    """Check if a pickup location description is vague (not a real address)."""
+    t = text.lower().strip().rstrip('.!,')
+    for w in VAGUE_WORDS:
+        if t == w or t.startswith(w + " ") or t.endswith(" " + w) or f" {w} " in f" {t} ":
+            return True
+    return False
+
+
 # ─── Main Conversation Handler ───
 
 def handle_conversation(session, user_speech):
@@ -720,11 +738,15 @@ def handle_conversation(session, user_speech):
     while len(session.history) > 40:
         session.history.pop(0)
     
-    # Call LLM with tool support
+    # Call LLM WITHOUT tools first (DeepSeek ignores JSON format when tools are present)
     messages = session.build_messages()
-    result = call_llm_with_tools(messages)
+    result = call_llm(messages)
     
-    # Fallback if LLM fails
+    # If plain LLM fails, try with tools (as secondary fallback)
+    if not result:
+        result = call_llm_with_tools(messages)
+    
+    # Final fallback: regex extraction
     if not result:
         fallback = _fallback_response(session, user_speech)
         session.history.append({"role": "assistant", "content": fallback["say"]})
@@ -732,14 +754,29 @@ def handle_conversation(session, user_speech):
     
     # Extract fields from LLM response
     extracted = result.get("extracted", {})
+    pickup_was_vague = False
     if extracted:
         for k, v in extracted.items():
             if v and k in BOOKING_FIELDS:
+                # Don't accept vague locations as pickup — make the LLM ask for a real address
+                if k == "pickup" and _is_vague_location(v):
+                    pickup_was_vague = True
+                    continue  # Don't save vague location
                 session.data[k] = v
     
-    # Determine response
+    # If the pickup was vague, override the response to ask for street address
     say = result.get("say", "")
+    if pickup_was_vague:
+        if session.saved_addresses:
+            say = "Would you like me to use a saved address, or could you give me your street address?"
+        else:
+            say = "What's your street address?"
+    
     is_complete = result.get("all_collected", False) or session.is_complete
+    # Can't be complete if pickup was vague
+    if pickup_was_vague:
+        is_complete = False
+    
     needs_transfer = result.get("transfer_to_musa", False)
     farewell = result.get("farewell", False)
     needs_travel_calc = result.get("needs_travel_calc", False)
@@ -856,9 +893,12 @@ def _fallback_response(session, user_speech):
         extracted['name'] = nm.group(1).strip().title()
 
     # Pickup: "at [location]", "from [location]", "pick me up at [location]"
+    # But DON'T capture vague locations like "home", "my place"
     pk = re.search(r'(?:at|from|pick\s+(?:me\s+)?up\s+(?:at|from)?)\s+(.+?)(?:\s+(?:to|and|going|for|at)\s+|$)', user_speech)
     if pk and len(pk.group(1)) > 3:
-        extracted['pickup'] = pk.group(1).strip().rstrip('.,')
+        pickup_val = pk.group(1).strip().rstrip('.,')
+        if not _is_vague_location(pickup_val):
+            extracted['pickup'] = pickup_val
 
     # Dropoff: "to [destination]", "going to [destination]", "headed to"
     dr = re.search(r'(?:(?:going|headed|need|get)\s+)?(?:to)\s+(.+?)(?:\.|$)', user_speech)
